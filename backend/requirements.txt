@@ -5,6 +5,5 @@ python-dotenv==1.0.1
 pydantic==2.10.6
 pandas==2.2.3
 numpy==2.2.3
-pandas-ta==0.3.14b0
 sqlalchemy==2.0.38
 aiohttp==3.11.13
