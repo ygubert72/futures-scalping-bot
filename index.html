@@ -194,14 +194,15 @@
             const now = Date.now();
             const candles = [];
             let price = startPrice;
+            const stepMinutes = STATE.interval || 1;
             for (let i = 0; i < count; i++) {
-                const change = (Math.random() - 0.5) * 300;
+                const change = (Math.random() - 0.5) * 300 * Math.sqrt(stepMinutes / 5);
                 const open = price;
                 const close = price + change;
-                const high = Math.max(open, close) + Math.random() * 80;
-                const low = Math.min(open, close) - Math.random() * 80;
+                const high = Math.max(open, close) + Math.random() * 80 * Math.sqrt(stepMinutes / 5);
+                const low = Math.min(open, close) - Math.random() * 80 * Math.sqrt(stepMinutes / 5);
                 candles.push({
-                    time: now - (count - i) * 60000,
+                    time: now - (count - i) * stepMinutes * 60000,
                     open: Math.round(open * 100) / 100,
                     high: Math.round(high * 100) / 100,
                     low: Math.round(low * 100) / 100,
@@ -213,12 +214,23 @@
         }
 
         // ---------- ЗАГРУЗКА С MOEX ----------
-        async function fetchCandlesFromMOEX(instrument, interval = 1, count = 500) {
+        async function fetchCandlesFromMOEX(instrument, interval = 1) {
             try {
                 const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
                 const now = new Date();
                 const from = new Date(now);
-                from.setDate(from.getDate() - 7);
+                
+                // Период в зависимости от интервала
+                let daysBack = 1;
+                switch(interval) {
+                    case 1: daysBack = 1; break;
+                    case 5: daysBack = 3; break;
+                    case 15: daysBack = 7; break;
+                    case 60: daysBack = 14; break;
+                    case 240: daysBack = 30; break;
+                    default: daysBack = 1;
+                }
+                from.setDate(from.getDate() - daysBack);
                 
                 const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
                 const params = new URLSearchParams({
@@ -234,7 +246,8 @@
                 
                 if (candles.length === 0) return null;
                 
-                return candles.map(row => ({
+                const maxCandles = Math.min(candles.length, 300);
+                return candles.slice(-maxCandles).map(row => ({
                     time: new Date(row[cols.indexOf('begin')]).getTime(),
                     open: row[cols.indexOf('open')],
                     high: row[cols.indexOf('high')],
@@ -270,7 +283,6 @@
             STATE.zoomLevel = 1;
             STATE.offset = 0;
             
-            // Обновляем кнопки
             document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
             document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
             document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
@@ -525,12 +537,18 @@
 
         // ---------- ЗАГРУЗКА ДАННЫХ ----------
         async function loadData(instrument = 'RTS') {
-            const candles = await fetchCandlesFromMOEX(instrument, STATE.interval, 500);
+            const interval = STATE.interval;
+            const candles = await fetchCandlesFromMOEX(instrument, interval);
             if (candles && candles.length > 10) {
                 STATE.allCandles = candles;
-                console.log('✅ Загружено свечей с MOEX:', candles.length);
+                console.log(`✅ Загружено свечей (${interval}м):`, candles.length);
             } else {
-                const count = Math.max(200, STATE.visibleCount * 3);
+                let count = 100;
+                if (interval === 1) count = 60;
+                else if (interval === 5) count = 80;
+                else if (interval === 15) count = 80;
+                else if (interval === 60) count = 70;
+                else if (interval === 240) count = 60;
                 const startPrice = instrument === 'RTS' ? 124500 : 89.45;
                 STATE.allCandles = generateTestCandles(count, startPrice);
                 console.log('📊 Используются тестовые свечи:', STATE.allCandles.length);
@@ -643,7 +661,6 @@
                 `).join('');
             }
             
-            // === ОБНОВЛЕНИЕ ТЕКУЩЕЙ ЦЕНЫ ===
             const inst = STATE.currentInstrument || 'RTS';
             const quote = STATE.quotes[inst];
             if (quote && quote.price > 0) {
@@ -672,14 +689,12 @@
             try {
                 const inst = STATE.currentInstrument || 'RTS';
                 
-                // Обновляем котировки для обоих инструментов
                 const rts = await fetchQuote('RTS');
                 if (rts && rts.price > 0) STATE.quotes.RTS = rts;
                 
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
                 
-                // Обновляем последнюю свечу для текущего инструмента
                 if (STATE.allCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
                     const last = STATE.allCandles[STATE.allCandles.length-1];
                     const now = Date.now();
@@ -718,10 +733,8 @@
             
             setupChartControls();
             
-            // Загружаем данные для RTS
             await loadData('RTS');
             
-            // Загружаем котировки
             const rts = await fetchQuote('RTS');
             if (rts) STATE.quotes.RTS = rts;
             const si = await fetchQuote('Si');
