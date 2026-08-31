@@ -1,289 +1,401 @@
 <!DOCTYPE html>
 <html lang="ru">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Futures Scalping Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { 
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: #111827; 
-        color: #f3f4f6; 
-        height: 100vh;
-        overflow: hidden;
-      }
-      #root { height: 100vh; overflow: hidden; }
-      .card { background: #1f2937; border-radius: 12px; padding: 1rem; border: 1px solid #374151; }
-      .status-badge.active { background: #10b981; color: white; }
-      .status-badge.inactive { background: #6b7280; color: white; }
-      ::-webkit-scrollbar { width: 4px; height: 4px; }
-      ::-webkit-scrollbar-track { background: #1f2937; }
-      ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; overflow: hidden; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 12px; height: 100vh; display: flex; flex-direction: column; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #1e293b; flex-shrink: 0; }
+        .header h1 { font-size: 20px; color: #f1f5f9; }
+        .balance { text-align: right; }
+        .balance .label { font-size: 11px; color: #94a3b8; }
+        .balance .amount { font-size: 22px; font-weight: bold; color: #22c55e; }
+        .grid { display: grid; grid-template-columns: 1fr 320px; gap: 12px; flex: 1; min-height: 0; padding-top: 10px; }
+        .card { background: #1e293b; border-radius: 12px; padding: 12px; border: 1px solid #334155; display: flex; flex-direction: column; }
+        .card-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
+        #chart-container { flex: 1; min-height: 0; position: relative; }
+        #chart-container iframe { width: 100%; height: 100%; border: none; }
+        .right-panel { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+        .strategy-btn { padding: 4px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; color: white; transition: all 0.2s; }
+        .strategy-btn.active { background: #22c55e; }
+        .strategy-btn.active:hover { background: #16a34a; }
+        .strategy-btn.inactive { background: #64748b; }
+        .strategy-btn.inactive:hover { background: #475569; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex-shrink: 0; }
+        .stat-item { background: #0f172a; padding: 6px 10px; border-radius: 6px; text-align: center; }
+        .stat-item .value { font-size: 16px; font-weight: bold; }
+        .stat-item .value.green { color: #22c55e; }
+        .stat-item .value.red { color: #ef4444; }
+        .stat-item .value.yellow { color: #eab308; }
+        .stat-item .label { font-size: 10px; color: #94a3b8; }
+        .trades-table { flex: 1; overflow: hidden; }
+        .trades-table .scroll { height: 100%; overflow-y: auto; }
+        .trades-table table { width: 100%; font-size: 12px; border-collapse: collapse; }
+        .trades-table th { text-align: left; padding: 4px 4px; color: #94a3b8; font-weight: 500; border-bottom: 1px solid #1e293b; position: sticky; top: 0; background: #1e293b; }
+        .trades-table td { padding: 4px 4px; border-bottom: 1px solid #1e293b; }
+        .badge { padding: 2px 6px; border-radius: 3px; font-size: 10px; }
+        .badge.buy { background: #166534; color: #86efac; }
+        .badge.sell { background: #7f1d1d; color: #fca5a5; }
+        .profit-positive { color: #22c55e; }
+        .profit-negative { color: #ef4444; }
+        .quote-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1e293b; font-size: 13px; }
+        .quote-item:last-child { border-bottom: none; }
+        .quote-price { font-weight: 600; }
+        .quote-change.positive { color: #22c55e; }
+        .quote-change.negative { color: #ef4444; }
+        .tv-lightweight-charts { width: 100% !important; height: 100% !important; }
     </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script>
-      // ============================================================
-      // ТОРГОВЫЙ БОТ — ВСЯ ЛОГИКА В ОДНОМ ФАЙЛЕ
-      // ============================================================
-
-      const DEMO_BALANCE = 100000;
-      let balance = DEMO_BALANCE;
-      let trades = [];
-      let strategies = { RTS: false, Si: false };
-      let quotes = { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } };
-      let activePositions = { RTS: null, Si: null };
-      let stats = { total: 0, wins: 0, losses: 0, profit: 0 };
-
-      // ---------- MOEX API ----------
-      async function fetchQuote(instrument) {
-        try {
-          const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
-          const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
-          const resp = await fetch(url);
-          const data = await resp.json();
-          const row = data.marketdata.data[0];
-          const cols = data.marketdata.columns;
-          const price = row[cols.indexOf('LAST')] || 0;
-          const open = row[cols.indexOf('OPEN')] || price;
-          const change = open ? ((price - open) / open) * 100 : 0;
-          return { price, change };
-        } catch {
-          return null;
-        }
-      }
-
-      async function updateQuotes() {
-        const rts = await fetchQuote('RTS');
-        const si = await fetchQuote('Si');
-        if (rts) quotes.RTS = rts;
-        if (si) quotes.Si = si;
-        render();
-      }
-
-      // ---------- ДЕМО-СЧЁТ ----------
-      function executeTrade(instrument, side, price) {
-        const pos = activePositions[instrument];
-        
-        if (side === 'buy') {
-          if (pos) return;
-          activePositions[instrument] = { side: 'buy', entry: price };
-          return;
-        }
-
-        if (side === 'sell') {
-          if (!pos) return;
-          const profit = (price - pos.entry) * 1; // 1 контракт
-          balance += profit;
-          trades.push({
-            id: Date.now(),
-            instrument,
-            side: pos.side === 'buy' ? 'sell' : 'buy',
-            price,
-            profit: Math.round(profit * 100) / 100,
-            timestamp: new Date().toLocaleTimeString()
-          });
-          activePositions[instrument] = null;
-          stats.total++;
-          if (profit > 0) stats.wins++; else stats.losses++;
-          stats.profit += profit;
-        }
-        render();
-      }
-
-      // ---------- СТРАТЕГИИ ----------
-      function runStrategies() {
-        if (!strategies.RTS && !strategies.Si) return;
-
-        const rts = quotes.RTS;
-        const si = quotes.Si;
-
-        // RTS — импульсный пробой
-        if (strategies.RTS && rts.price > 0) {
-          const pos = activePositions.RTS;
-          if (!pos) {
-            // Покупаем
-            executeTrade('RTS', 'buy', rts.price);
-          } else {
-            // Проверяем тейк/стоп
-            const profit = rts.price - pos.entry;
-            if (profit >= 120 || profit <= -45) {
-              executeTrade('RTS', 'sell', rts.price);
-            }
-          }
-        }
-
-        // Si — отскок от уровней
-        if (strategies.Si && si.price > 0) {
-          const pos = activePositions.Si;
-          if (!pos) {
-            // Продаём (имитация отскока)
-            if (si.price > 90) {
-              executeTrade('Si', 'buy', si.price);
-            }
-          } else {
-            const profit = pos.entry - si.price;
-            if (profit >= 70 || profit <= -25) {
-              executeTrade('Si', 'sell', si.price);
-            }
-          }
-        }
-      }
-
-      // ---------- ОТРИСОВКА ----------
-      function render() {
-        const container = document.getElementById('root');
-        const rts = quotes.RTS;
-        const si = quotes.Si;
-        const totalTrades = trades.length;
-
-        // Статистика
-        const winRate = stats.total ? Math.round((stats.wins / stats.total) * 100) : 0;
-        const profit = Math.round(stats.profit * 100) / 100;
-
-        // Последние 10 сделок
-        const lastTrades = trades.slice(-10).reverse();
-
-        container.innerHTML = `
-          <div class="h-screen p-4 flex flex-col overflow-hidden" style="background:#111827;">
-            <!-- Верхняя панель -->
-            <div class="flex justify-between items-center mb-3 flex-shrink-0">
-              <div>
-                <h1 class="text-2xl font-bold text-white">📊 Scalping Bot</h1>
-                <span class="text-xs text-gray-400">Демо-счёт • ${new Date().toLocaleDateString()}</span>
-              </div>
-              <div class="text-right">
-                <div class="text-sm text-gray-400">Баланс</div>
-                <div class="text-2xl font-bold text-green-500">
-                  ${Math.round(balance)} ₽
-                  ${profit !== 0 ? `<span class="text-sm ml-2 ${profit > 0 ? 'text-green-400' : 'text-red-400'}">${profit > 0 ? '+' : ''}${profit} ₽</span>` : ''}
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <!-- Шапка -->
+            <div class="header">
+                <div>
+                    <h1>📊 Scalping Bot</h1>
+                    <div style="display:flex;gap:16px;font-size:12px;color:#94a3b8;margin-top:2px;">
+                        <span id="rtsQuote">RTS: --</span>
+                        <span id="siQuote">Si: --</span>
+                    </div>
                 </div>
-              </div>
+                <div class="balance">
+                    <div class="label">БАЛАНС</div>
+                    <div class="amount" id="balanceDisplay">100 000 ₽</div>
+                </div>
             </div>
-
+            
             <!-- Основная сетка -->
-            <div class="grid grid-cols-12 gap-3 flex-1 min-h-0">
-              <!-- Левый столбец: котировки -->
-              <div class="col-span-3 flex flex-col gap-3">
-                <div class="card flex-1">
-                  <div class="text-xs text-gray-400 mb-2">📈 КОТИРОВКИ</div>
-                  ${['RTS', 'Si'].map(inst => {
-                    const q = quotes[inst];
-                    return `
-                      <div class="flex justify-between items-center py-2 border-b border-gray-700 last:border-0">
-                        <span class="text-sm font-semibold text-gray-300">${inst}</span>
-                        <div class="text-right">
-                          <div class="text-white font-mono">${q?.price ? q.price.toFixed(2) : '--'}</div>
-                          <div class="text-xs ${q?.change && q.change > 0 ? 'text-green-400' : 'text-red-400'}">
-                            ${q?.change ? `${q.change > 0 ? '+' : ''}${q.change.toFixed(2)}%` : '--'}
-                          </div>
-                        </div>
-                      </div>
-                    `;
-                  }).join('')}
-                  <div class="mt-2 text-xs text-gray-500">Обновление: каждые 2с</div>
-                </div>
-
-                <!-- Стратегии -->
+            <div class="grid">
+                <!-- График -->
                 <div class="card">
-                  <div class="text-xs text-gray-400 mb-2">⚡ СТРАТЕГИИ</div>
-                  ${['RTS', 'Si'].map(inst => `
-                    <div class="flex items-center justify-between py-1">
-                      <span class="text-sm text-gray-300">${inst}</span>
-                      <div class="flex gap-1">
-                        <button onclick="toggleStrategy('${inst}')" 
-                          class="px-2 py-0.5 text-xs rounded ${strategies[inst] ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white">
-                          ${strategies[inst] ? '⏹' : '▶️'}
-                        </button>
-                      </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                        <div class="card-title">📈 ГРАФИК RTS</div>
+                        <div style="display:flex;gap:8px;font-size:11px;">
+                            <button id="interval1m" class="text-gray-400 hover:text-white transition">1м</button>
+                            <button id="interval5m" class="text-gray-400 hover:text-white transition">5м</button>
+                            <button id="interval15m" class="text-gray-400 hover:text-white transition">15м</button>
+                        </div>
                     </div>
-                  `).join('')}
-                  <div class="text-xs text-gray-500 mt-1">${strategies.RTS || strategies.Si ? '🟢 Активна' : '⏸ Остановлена'}</div>
-                </div>
-              </div>
-
-              <!-- Средний столбец: статистика -->
-              <div class="col-span-5 flex flex-col gap-3">
-                <div class="grid grid-cols-4 gap-2 flex-shrink-0">
-                  ${[
-                    { label: 'Всего сделок', value: stats.total },
-                    { label: 'Win Rate', value: `${winRate}%`, color: 'text-green-400' },
-                    { label: 'Профит', value: `${profit} ₽`, color: profit >= 0 ? 'text-green-400' : 'text-red-400' },
-                    { label: 'Просадка', value: '0%', color: 'text-yellow-400' }
-                  ].map(s => `
-                    <div class="card text-center p-2">
-                      <div class="text-xs text-gray-400">${s.label}</div>
-                      <div class="text-base font-bold ${s.color || 'text-white'}">${s.value}</div>
+                    <div id="chart-container" style="flex:1;min-height:0;position:relative;">
+                        <div id="chart" style="width:100%;height:100%;"></div>
                     </div>
-                  `).join('')}
                 </div>
-
-                <!-- График P&L -->
-                <div class="card flex-1">
-                  <div class="text-xs text-gray-400 mb-1">📉 P&L ТРЕНД</div>
-                  <div class="h-full flex items-end space-x-0.5" style="min-height:60px;">
-                    ${trades.slice(-30).map(t => {
-                      const h = Math.min(Math.abs(t.profit || 0) / 100, 60);
-                      return `<div class="flex-1 flex flex-col items-center">
-                        <div class="w-full transition-all" style="height:${Math.max(h, 2)}px; background-color:${t.profit > 0 ? '#22c55e' : '#ef4444'}; min-height:2px;"></div>
-                      </div>`;
-                    }).join('') || '<div class="text-gray-500 text-sm w-full text-center">Нет сделок</div>'}
-                  </div>
-                  <div class="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Последние 30 сделок</span>
-                    <span>Прибыль: ${profit} ₽</span>
-                  </div>
+                
+                <!-- Правая панель -->
+                <div class="right-panel">
+                    <!-- Котировки и стратегии -->
+                    <div class="card" style="flex-shrink:0;">
+                        <div class="card-title">⚡ УПРАВЛЕНИЕ</div>
+                        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                            <button id="rtsBtn" class="strategy-btn inactive" onclick="toggleStrategy('RTS')">▶ RTS</button>
+                            <button id="siBtn" class="strategy-btn inactive" onclick="toggleStrategy('Si')">▶ Si</button>
+                        </div>
+                        <div id="strategyStatus" style="font-size:12px;color:#94a3b8;">⏸ Остановлены</div>
+                    </div>
+                    
+                    <!-- Статистика -->
+                    <div class="card" style="flex-shrink:0;">
+                        <div class="card-title">📊 СТАТИСТИКА</div>
+                        <div class="stats-grid">
+                            <div class="stat-item"><div class="value" id="totalTrades">0</div><div class="label">Сделок</div></div>
+                            <div class="stat-item"><div class="value green" id="winRate">0%</div><div class="label">Win Rate</div></div>
+                            <div class="stat-item"><div class="value green" id="totalProfit">0 ₽</div><div class="label">Профит</div></div>
+                            <div class="stat-item"><div class="value yellow" id="drawdown">0%</div><div class="label">Просадка</div></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Сделки -->
+                    <div class="card" style="flex:1;min-height:0;">
+                        <div class="card-title">📋 ПОСЛЕДНИЕ СДЕЛКИ</div>
+                        <div class="trades-table">
+                            <div class="scroll">
+                                <table>
+                                    <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Цена</th><th style="text-align:right;">P&L</th></tr></thead>
+                                    <tbody id="tradesBody">
+                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:12px 0;">Нет сделок</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-              </div>
-
-              <!-- Правый столбец: сделки -->
-              <div class="col-span-4 card flex flex-col">
-                <div class="text-xs text-gray-400 mb-2 flex-shrink-0">📋 ПОСЛЕДНИЕ СДЕЛКИ (${stats.total})</div>
-                <div class="flex-1 overflow-hidden">
-                  <div class="h-full overflow-y-auto" style="scrollbar-width:thin;">
-                    <table class="w-full text-xs">
-                      <thead class="text-gray-500 sticky top-0 bg-gray-800">
-                        <tr><th class="text-left py-1">Время</th><th class="text-left py-1">Инстр</th><th class="text-left py-1">Напр</th><th class="text-left py-1">Цена</th><th class="text-right py-1">P&L</th></tr>
-                      </thead>
-                      <tbody>
-                        ${lastTrades.map(t => `
-                          <tr class="border-t border-gray-700">
-                            <td class="py-1 text-gray-400">${t.timestamp}</td>
-                            <td class="py-1 text-gray-300">${t.instrument}</td>
-                            <td class="py-1"><span class="px-1.5 py-0.5 rounded text-xs ${t.side === 'buy' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}">${t.side === 'buy' ? 'Покуп' : 'Продаж'}</span></td>
-                            <td class="py-1 text-gray-300">${t.price.toFixed(2)}</td>
-                            <td class="py-1 text-right font-mono ${t.profit > 0 ? 'text-green-400' : t.profit < 0 ? 'text-red-400' : 'text-gray-400'}">${t.profit ? `${t.profit > 0 ? '+' : ''}${t.profit}` : '--'}</td>
-                          </tr>
-                        `).join('') || '<tr><td colspan="5" class="text-center text-gray-500 py-4">Нет сделок</td></tr>'}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
             </div>
-          </div>
-        `;
-      }
+        </div>
+    </div>
 
-      // ---------- УПРАВЛЕНИЕ ----------
-      window.toggleStrategy = function(instrument) {
-        strategies[instrument] = !strategies[instrument];
-        render();
-      };
+    <script>
+        // ============================================
+        //  ТОРГОВЫЙ БОТ + ГРАФИК
+        // ============================================
+        
+        // ---------- СОСТОЯНИЕ ----------
+        const STATE = {
+            balance: 100000,
+            trades: [],
+            strategies: { RTS: false, Si: false },
+            quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
+            positions: { RTS: null, Si: null },
+            stats: { total: 0, wins: 0, losses: 0, profit: 0 },
+            chartData: [],
+            interval: '1m'
+        };
 
-      // ---------- ЦИКЛ ОБНОВЛЕНИЯ ----------
-      async function loop() {
-        await updateQuotes();
-        runStrategies();
-        setTimeout(loop, 2000);
-      }
+        // ---------- ГРАФИК ----------
+        let chart = null;
+        let candlestickSeries = null;
+        let markers = [];
 
-      // ---------- СТАРТ ----------
-      render();
-      loop();
+        function initChart() {
+            const container = document.getElementById('chart');
+            chart = LightweightCharts.createChart(container, {
+                layout: { background: { color: '#0f172a' }, textColor: '#94a3b8' },
+                grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
+                timeScale: { timeVisible: true, secondsVisible: true, borderColor: '#1e293b' },
+                rightPriceScale: { borderColor: '#1e293b' },
+                width: container.clientWidth,
+                height: container.clientHeight,
+            });
+            
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#22c55e',
+                downColor: '#ef4444',
+                borderUpColor: '#22c55e',
+                borderDownColor: '#ef4444',
+                wickUpColor: '#22c55e',
+                wickDownColor: '#ef4444',
+            });
+
+            // Обновление размера
+            window.addEventListener('resize', () => {
+                const rect = container.getBoundingClientRect();
+                chart.resize(rect.width, rect.height);
+            });
+        }
+
+        function updateChart(candles, trades) {
+            if (!candlestickSeries) return;
+            
+            candlestickSeries.setData(candles);
+            
+            // Маркеры (треугольники)
+            const markers = trades.map(t => {
+                const time = Math.floor(new Date(t.timestamp).getTime() / 1000);
+                return {
+                    time: time,
+                    position: t.side === 'buy' ? 'belowBar' : 'aboveBar',
+                    color: t.side === 'buy' ? '#22c55e' : '#ef4444',
+                    shape: t.side === 'buy' ? 'arrowUp' : 'arrowDown',
+                    text: t.side === 'buy' ? '▲' : '▼',
+                    size: 2,
+                };
+            });
+            candlestickSeries.setMarkers(markers);
+        }
+
+        // ---------- MOEX API ----------
+        async function fetchQuote(instrument) {
+            try {
+                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
+                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                const row = data.marketdata.data[0];
+                const cols = data.marketdata.columns;
+                const price = row[cols.indexOf('LAST')] || 0;
+                const open = row[cols.indexOf('OPEN')] || price;
+                const change = open ? ((price - open) / open) * 100 : 0;
+                return { price, change };
+            } catch {
+                return null;
+            }
+        }
+
+        async function fetchCandles(instrument, interval = 1) {
+            try {
+                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
+                const now = new Date();
+                const from = new Date(now);
+                from.setDate(from.getDate() - 1);
+                
+                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
+                const params = new URLSearchParams({
+                    from: from.toISOString().split('T')[0],
+                    till: now.toISOString().split('T')[0],
+                    interval: interval,
+                });
+                
+                const resp = await fetch(`${url}?${params}`);
+                const data = await resp.json();
+                const candles = data.candles.data || [];
+                const cols = data.candles.columns || [];
+                
+                return candles.map(row => ({
+                    time: Math.floor(new Date(row[cols.indexOf('begin')]).getTime() / 1000),
+                    open: row[cols.indexOf('open')],
+                    high: row[cols.indexOf('high')],
+                    low: row[cols.indexOf('low')],
+                    close: row[cols.indexOf('close')],
+                }));
+            } catch {
+                return [];
+            }
+        }
+
+        // ---------- ТОРГОВЛЯ ----------
+        function executeTrade(instrument, side, price) {
+            const pos = STATE.positions[instrument];
+            
+            if (side === 'buy') {
+                if (pos) return;
+                STATE.positions[instrument] = { side: 'buy', entry: price };
+                return;
+            }
+
+            if (side === 'sell') {
+                if (!pos) return;
+                const profit = (price - pos.entry);
+                STATE.balance += profit;
+                const trade = {
+                    id: Date.now(),
+                    instrument,
+                    side: 'sell',
+                    price: Math.round(price * 100) / 100,
+                    profit: Math.round(profit * 100) / 100,
+                    timestamp: new Date().toISOString(),
+                    timeStr: new Date().toLocaleTimeString()
+                };
+                STATE.trades.push(trade);
+                STATE.positions[instrument] = null;
+                STATE.stats.total++;
+                if (profit > 0) STATE.stats.wins++; else STATE.stats.losses++;
+                STATE.stats.profit += profit;
+                render();
+                updateChart(STATE.chartData, STATE.trades);
+            }
+        }
+
+        // ---------- СТРАТЕГИИ ----------
+        function runStrategies() {
+            if (!STATE.strategies.RTS && !STATE.strategies.Si) return;
+
+            const rts = STATE.quotes.RTS;
+            const si = STATE.quotes.Si;
+
+            if (STATE.strategies.RTS && rts.price > 0) {
+                const pos = STATE.positions.RTS;
+                if (!pos) {
+                    executeTrade('RTS', 'buy', rts.price);
+                } else {
+                    const profit = rts.price - pos.entry;
+                    if (profit >= 120 || profit <= -45) {
+                        executeTrade('RTS', 'sell', rts.price);
+                    }
+                }
+            }
+
+            if (STATE.strategies.Si && si.price > 0) {
+                const pos = STATE.positions.Si;
+                if (!pos) {
+                    if (si.price > 90) {
+                        executeTrade('Si', 'buy', si.price);
+                    }
+                } else {
+                    const profit = pos.entry - si.price;
+                    if (profit >= 70 || profit <= -25) {
+                        executeTrade('Si', 'sell', si.price);
+                    }
+                }
+            }
+        }
+
+        // ---------- ОТРИСОВКА ----------
+        function render() {
+            const s = STATE.stats;
+            const winRate = s.total ? Math.round((s.wins / s.total) * 100) : 0;
+            const profit = Math.round(s.profit * 100) / 100;
+
+            document.getElementById('balanceDisplay').textContent = Math.round(STATE.balance) + ' ₽';
+            document.getElementById('rtsQuote').textContent = `RTS: ${STATE.quotes.RTS.price ? STATE.quotes.RTS.price.toFixed(2) : '--'}`;
+            document.getElementById('siQuote').textContent = `Si: ${STATE.quotes.Si.price ? STATE.quotes.Si.price.toFixed(2) : '--'}`;
+
+            document.getElementById('totalTrades').textContent = s.total;
+            document.getElementById('winRate').textContent = winRate + '%';
+            document.getElementById('totalProfit').textContent = (profit > 0 ? '+' : '') + profit + ' ₽';
+            document.getElementById('totalProfit').className = 'value ' + (profit >= 0 ? 'green' : 'red');
+
+            const rtsBtn = document.getElementById('rtsBtn');
+            const siBtn = document.getElementById('siBtn');
+            rtsBtn.textContent = (STATE.strategies.RTS ? '⏹' : '▶') + ' RTS';
+            rtsBtn.className = 'strategy-btn ' + (STATE.strategies.RTS ? 'active' : 'inactive');
+            siBtn.textContent = (STATE.strategies.Si ? '⏹' : '▶') + ' Si';
+            siBtn.className = 'strategy-btn ' + (STATE.strategies.Si ? 'active' : 'inactive');
+            document.getElementById('strategyStatus').textContent = 
+                (STATE.strategies.RTS || STATE.strategies.Si) ? '🟢 Активны' : '⏸ Остановлены';
+
+            const tbody = document.getElementById('tradesBody');
+            const trades = STATE.trades.slice(-15).reverse();
+            if (trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:12px 0;">Нет сделок</td></tr>';
+            } else {
+                tbody.innerHTML = trades.map(t => `
+                    <tr>
+                        <td>${t.timeStr}</td>
+                        <td>${t.instrument}</td>
+                        <td><span class="badge ${t.side === 'buy' ? 'buy' : 'sell'}">${t.side === 'buy' ? 'Покуп' : 'Продаж'}</span></td>
+                        <td>${t.price.toFixed(2)}</td>
+                        <td style="text-align:right;font-weight:bold;" class="${t.profit >= 0 ? 'profit-positive' : 'profit-negative'}">${t.profit >= 0 ? '+' : ''}${t.profit}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // ---------- УПРАВЛЕНИЕ ----------
+        window.toggleStrategy = function(instrument) {
+            STATE.strategies[instrument] = !STATE.strategies[instrument];
+            render();
+        };
+
+        // ---------- ЦИКЛ ОБНОВЛЕНИЯ ----------
+        async function updateAll() {
+            // Котировки
+            const rts = await fetchQuote('RTS');
+            const si = await fetchQuote('Si');
+            if (rts) STATE.quotes.RTS = rts;
+            if (si) STATE.quotes.Si = si;
+            
+            // Свечи
+            const candles = await fetchCandles('RTS', STATE.interval === '1m' ? 1 : STATE.interval === '5m' ? 5 : 15);
+            if (candles.length > 0) {
+                STATE.chartData = candles;
+                updateChart(candles, STATE.trades);
+            }
+            
+            // Стратегии
+            runStrategies();
+            render();
+            
+            setTimeout(updateAll, 2000);
+        }
+
+        // ---------- ИНИЦИАЛИЗАЦИЯ ----------
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            
+            // Кнопки интервалов
+            ['1m', '5m', '15m'].forEach(interval => {
+                document.getElementById(`interval${interval}`).addEventListener('click', () => {
+                    STATE.interval = interval;
+                    updateAll();
+                });
+            });
+            
+            updateAll();
+        });
     </script>
-  </body>
+</body>
 </html>
