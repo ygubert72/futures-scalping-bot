@@ -6,7 +6,6 @@
     <title>Futures Scalping Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* ... все стили как в предыдущей версии ... */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; overflow: hidden; }
         .container { max-width: 1500px; margin: 0 auto; padding: 10px; height: 100vh; display: flex; flex-direction: column; }
@@ -62,6 +61,9 @@
         .price-display .change { font-size: 11px; }
         .price-display .change.positive { color: #22c55e; }
         .price-display .change.negative { color: #ef4444; }
+        .status-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #334155; color: #94a3b8; margin-left: 8px; }
+        .status-badge.ok { background: #166534; color: #86efac; }
+        .status-badge.err { background: #7f1d1d; color: #fca5a5; }
     </style>
 </head>
 <body>
@@ -82,7 +84,6 @@
                 </div>
             </div>
             
-            <!-- Основная сетка -->
             <div class="grid">
                 <!-- График -->
                 <div class="card">
@@ -164,9 +165,78 @@
 
     <script>
         // ============================================================
-        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК С МАСШТАБИРОВАНИЕМ
+        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК + АВТО-ОПРЕДЕЛЕНИЕ ИНСТРУМЕНТОВ
         // ============================================================
         
+        // ---------- АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ ----------
+        const INSTRUMENT_CODES = { RTS: null, Si: null };
+        let codesDetected = false;
+
+        async function detectInstrumentCodes() {
+            try {
+                // Получаем список всех фьючерсов
+                const resp = await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities.json');
+                const data = await resp.json();
+                const rows = data.securities?.data || [];
+                const cols = data.securities?.columns || [];
+                
+                const secIdx = cols.indexOf('SECID');
+                const nameIdx = cols.indexOf('SHORTNAME');
+                
+                // Ищем RTS и Si
+                let rtsCodes = [];
+                let siCodes = [];
+                
+                rows.forEach(row => {
+                    const secid = row[secIdx];
+                    const name = row[nameIdx] || '';
+                    
+                    // RTS: ищем RTS-* или RTSM-*
+                    if (name.startsWith('RTS-') || name.startsWith('RTSM-')) {
+                        rtsCodes.push({ secid, name });
+                    }
+                    // Si: ищем Si-* или SiM-*
+                    if (name.startsWith('Si-') || name.startsWith('SiM-')) {
+                        siCodes.push({ secid, name });
+                    }
+                });
+                
+                // Сортируем по убыванию (последний месяц — актуальный)
+                const sortByDate = (arr) => {
+                    return arr.sort((a, b) => {
+                        const dateA = a.name.match(/\d{2}\.\d{2}/)?.[0] || '00.00';
+                        const dateB = b.name.match(/\d{2}\.\d{2}/)?.[0] || '00.00';
+                        return dateB.localeCompare(dateA);
+                    });
+                };
+                
+                const sortedRTS = sortByDate(rtsCodes);
+                const sortedSi = sortByDate(siCodes);
+                
+                if (sortedRTS.length > 0) {
+                    INSTRUMENT_CODES.RTS = sortedRTS[0].secid;
+                    console.log(`✅ Найден RTS: ${sortedRTS[0].name} (${INSTRUMENT_CODES.RTS})`);
+                }
+                
+                if (sortedSi.length > 0) {
+                    INSTRUMENT_CODES.Si = sortedSi[0].secid;
+                    console.log(`✅ Найден Si: ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
+                }
+                
+                codesDetected = true;
+                return true;
+                
+            } catch (e) {
+                console.warn('⚠️ Не удалось определить коды инструментов, используем запасные:', e);
+                // Запасные коды
+                INSTRUMENT_CODES.RTS = 'RIU6';
+                INSTRUMENT_CODES.Si = 'SIU6';
+                codesDetected = true;
+                return true;
+            }
+        }
+
+        // ---------- СОСТОЯНИЕ ----------
         const STATE = {
             balance: 100000,
             trades: [],
@@ -186,6 +256,7 @@
             currentInstrument: 'RTS',
         };
 
+        // ---------- ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ ----------
         function generateTestCandles(count, startPrice = 124500) {
             const now = Date.now();
             const candles = [];
@@ -209,9 +280,15 @@
             return candles;
         }
 
+        // ---------- ЗАГРУЗКА С MOEX ----------
         async function fetchCandlesFromMOEX(instrument, interval = 1) {
             try {
-                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
+                const sec = INSTRUMENT_CODES[instrument];
+                if (!sec) {
+                    console.warn(`⚠️ Нет кода для ${instrument}`);
+                    return null;
+                }
+                
                 const now = new Date();
                 const from = new Date(now);
                 
@@ -256,7 +333,9 @@
 
         async function fetchQuote(instrument) {
             try {
-                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
+                const sec = INSTRUMENT_CODES[instrument];
+                if (!sec) return null;
+                
                 const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
                 const resp = await fetch(url);
                 const data = await resp.json();
@@ -271,6 +350,7 @@
             }
         }
 
+        // ---------- ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТОВ ----------
         window.switchInstrument = async function(instrument) {
             STATE.currentInstrument = instrument;
             STATE.zoomLevel = 1;
@@ -283,6 +363,7 @@
             await loadData(instrument);
         };
 
+        // ---------- ГРАФИК ----------
         let chartState = {
             isDragging: false,
             dragStartX: 0,
@@ -464,7 +545,6 @@
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
             
-            // === ГОРИЗОНТАЛЬНЫЙ ЗУМ (колёсико) ===
             canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 
@@ -479,7 +559,6 @@
                 }
             }, { passive: false });
             
-            // === ДРАГ ===
             canvas.addEventListener('mousedown', (e) => {
                 chartState.isDragging = true;
                 chartState.dragStartX = e.clientX;
@@ -503,18 +582,15 @@
                 }
             });
             
-            // === ТАЙМФРЕЙМЫ (НЕ СБРАСЫВАЕМ ЗУМ!) ===
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     STATE.interval = parseInt(btn.dataset.interval);
-                    // НЕ сбрасываем zoomLevel и offset!
                     loadData(STATE.currentInstrument || 'RTS');
                 });
             });
             
-            // === ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) ===
             document.getElementById('zoomInV').addEventListener('click', () => {
                 STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
                 drawCandleChart();
@@ -716,9 +792,16 @@
             setTimeout(updateAll, 2000);
         }
 
+        // ---------- ИНИЦИАЛИЗАЦИЯ ----------
         document.addEventListener('DOMContentLoaded', async () => {
             STATE.visibleCount = 60;
             STATE.zoomLevel = 1;
+            
+            // Сначала определяем актуальные коды инструментов
+            console.log('🔍 Определение актуальных фьючерсов...');
+            await detectInstrumentCodes();
+            
+            console.log('📊 Используемые коды:', INSTRUMENT_CODES);
             
             setupChartControls();
             
