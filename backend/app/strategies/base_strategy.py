@@ -3,6 +3,8 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 
+from app.utils.market_hours import MarketHours
+
 logger = logging.getLogger(__name__)
 
 class BaseStrategy(ABC):
@@ -17,41 +19,31 @@ class BaseStrategy(ABC):
         
     @abstractmethod
     async def on_quote(self, quote_data: Dict[str, Any]):
-        """
-        Обработка новой котировки
-        
-        Args:
-            quote_data: Данные котировки (цена, объем, время)
-        """
+        """Обработка новой котировки"""
         pass
         
     @abstractmethod
     async def generate_signal(self, market_data: Dict[str, Any]) -> Optional[Dict]:
-        """
-        Генерация торгового сигнала
-        
-        Returns:
-            Dict с полями: action (buy/sell/close), price, reason
-            или None, если сигнала нет
-        """
+        """Генерация торгового сигнала"""
         pass
         
     @abstractmethod
     async def validate_signal(self, signal: Dict) -> bool:
-        """
-        Проверка валидности сигнала перед отправкой заявки
-        """
+        """Проверка валидности сигнала"""
         pass
         
     async def on_trade_filled(self, trade_data: Dict[str, Any]):
-        """
-        Обработка исполненной сделки
-        """
+        """Обработка исполненной сделки"""
         self.trades.append(trade_data)
         logger.info(f"[{self.name}] Сделка исполнена: {trade_data}")
         
     async def start(self):
         """Запуск стратегии"""
+        if not MarketHours.is_market_open():
+            logger.warning(f"[{self.name}] Попытка запуска вне торговых часов")
+            # Можно либо запустить в режиме ожидания, либо отказать
+            # Рекомендую запустить в режиме ожидания
+            
         self.is_active = True
         logger.info(f"[{self.name}] Стратегия запущена для {self.instrument}")
         
@@ -77,3 +69,7 @@ class BaseStrategy(ABC):
             "profit": total_profit,
             "avg_profit": total_profit / total if total > 0 else 0
         }
+    
+    def is_market_open(self) -> bool:
+        """Проверка открытия рынка"""
+        return MarketHours.is_market_open()
