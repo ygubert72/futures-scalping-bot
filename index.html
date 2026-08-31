@@ -18,7 +18,7 @@
         .card { background: #1e293b; border-radius: 12px; padding: 12px; border: 1px solid #334155; display: flex; flex-direction: column; }
         .card-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
         #chart-container { flex: 1; min-height: 0; position: relative; }
-        #chartCanvas { width: 100%; height: 100%; display: block; }
+        #priceChart { width: 100%; height: 100%; display: block; background: #0f172a; border-radius: 8px; }
         .right-panel { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
         .strategy-btn { padding: 4px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; color: white; transition: all 0.2s; }
         .strategy-btn.active { background: #22c55e; }
@@ -67,10 +67,11 @@
                 <!-- График -->
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-                        <div class="card-title">📈 ГРАФИК RTS</div>
+                        <div class="card-title">📈 ГРАФИК ЦЕН RTS</div>
+                        <span style="font-size:10px;color:#64748b;" id="priceLabel">--</span>
                     </div>
                     <div id="chart-container" style="flex:1;min-height:0;position:relative;">
-                        <canvas id="chartCanvas"></canvas>
+                        <canvas id="priceChart"></canvas>
                     </div>
                 </div>
                 
@@ -118,7 +119,7 @@
 
     <script>
         // ============================================
-        //  ТОРГОВЫЙ БОТ + ГРАФИК (БЕЗ ВНЕШНИХ БИБЛИОТЕК)
+        //  ТОРГОВЫЙ БОТ + ПРОСТОЙ ГРАФИК
         // ============================================
         
         // ---------- СОСТОЯНИЕ ----------
@@ -129,102 +130,139 @@
             quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
             positions: { RTS: null, Si: null },
             stats: { total: 0, wins: 0, losses: 0, profit: 0 },
-            chartData: [],
+            priceHistory: [],
+            maxPoints: 100
         };
 
-        // ---------- ГРАФИК (СВОЯ РЕАЛИЗАЦИЯ) ----------
-        function drawChart(canvas, candles, trades) {
+        // ---------- ГРАФИК ----------
+        function drawPriceChart() {
+            const canvas = document.getElementById('priceChart');
             if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const rect = canvas.parentElement.getBoundingClientRect();
-            canvas.width = rect.width * window.devicePixelRatio;
-            canvas.height = rect.height * window.devicePixelRatio;
+            
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
             canvas.style.width = rect.width + 'px';
             canvas.style.height = rect.height + 'px';
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-
+            
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            
             const W = rect.width;
             const H = rect.height;
-            const pad = { top: 20, bottom: 20, left: 30, right: 10 };
+            const pad = { top: 20, bottom: 25, left: 50, right: 20 };
             const chartW = W - pad.left - pad.right;
             const chartH = H - pad.top - pad.bottom;
-
+            
             // Очистка
             ctx.fillStyle = '#0f172a';
             ctx.fillRect(0, 0, W, H);
-
-            if (!candles || candles.length === 0) {
+            
+            const data = STATE.priceHistory;
+            if (data.length < 2) {
                 ctx.fillStyle = '#475569';
                 ctx.font = '14px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('Нет данных', W/2, H/2);
+                ctx.fillText('Загрузка данных...', W/2, H/2);
                 return;
             }
-
+            
             // Находим min/max
-            let min = Infinity, max = -Infinity;
-            candles.forEach(c => {
-                if (c.low < min) min = c.low;
-                if (c.high > max) max = c.high;
-            });
+            const prices = data.map(d => d.price);
+            let min = Math.min(...prices);
+            let max = Math.max(...prices);
             const range = max - min || 1;
-            const candleWidth = Math.min(chartW / candles.length * 0.7, 20);
-            const gap = candleWidth * 0.3;
-
-            // Рисуем свечи
-            candles.forEach((c, i) => {
-                const x = pad.left + (i / candles.length) * chartW + gap/2;
-                const yHigh = pad.top + chartH - ((c.high - min) / range) * chartH;
-                const yLow = pad.top + chartH - ((c.low - min) / range) * chartH;
-                const yOpen = pad.top + chartH - ((c.open - min) / range) * chartH;
-                const yClose = pad.top + chartH - ((c.close - min) / range) * chartH;
-                
-                const isGreen = c.close >= c.open;
-                ctx.fillStyle = isGreen ? '#22c55e' : '#ef4444';
-                ctx.strokeStyle = isGreen ? '#22c55e' : '#ef4444';
-                ctx.lineWidth = 1;
-
-                // Тень (wick)
+            
+            // Добавляем отступы
+            min -= range * 0.05;
+            max += range * 0.05;
+            const range2 = max - min || 1;
+            
+            // Рисуем сетку
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 4; i++) {
+                const y = pad.top + (i / 4) * chartH;
                 ctx.beginPath();
-                ctx.moveTo(x + candleWidth/2, yHigh);
-                ctx.lineTo(x + candleWidth/2, yLow);
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
                 ctx.stroke();
-
-                // Тело (body)
-                const bodyY = Math.min(yOpen, yClose);
-                const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
-                ctx.fillRect(x, bodyY, candleWidth, bodyH);
+                
+                const price = max - (i / 4) * range2;
+                ctx.fillStyle = '#64748b';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'right';
+                ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
+            }
+            
+            // Рисуем линию цены
+            ctx.beginPath();
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 2;
+            
+            data.forEach((d, i) => {
+                const x = pad.left + (i / (data.length - 1)) * chartW;
+                const y = pad.top + chartH - ((d.price - min) / range2) * chartH;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             });
-
-            // Маркеры сделок (треугольники)
-            trades.forEach(t => {
-                const candle = candles.find(c => Math.abs(c.time - new Date(t.timestamp).getTime()/1000) < 30);
-                if (!candle) return;
-                const idx = candles.indexOf(candle);
-                const x = pad.left + (idx / candles.length) * chartW + candleWidth/2;
-                const y = pad.top + chartH - ((candle.close - min) / range) * chartH;
+            ctx.stroke();
+            
+            // Заливка под графиком
+            const lastX = pad.left + chartW;
+            const lastY = pad.top + chartH - ((data[data.length-1].price - min) / range2) * chartH;
+            ctx.lineTo(lastX, pad.top + chartH);
+            ctx.lineTo(pad.left, pad.top + chartH);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.1)';
+            ctx.fill();
+            
+            // Текущая цена
+            const currentPrice = data[data.length-1].price;
+            const currentY = pad.top + chartH - ((currentPrice - min) / range2) * chartH;
+            ctx.fillStyle = '#22c55e';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(currentPrice.toFixed(2), pad.left + chartW - 60, currentY - 8);
+            
+            // Маркеры сделок
+            STATE.trades.forEach(t => {
+                const idx = data.findIndex(d => Math.abs(d.time - new Date(t.timestamp).getTime()) < 5000);
+                if (idx === -1) return;
+                
+                const x = pad.left + (idx / (data.length - 1)) * chartW;
+                const y = pad.top + chartH - ((t.price - min) / range2) * chartH;
                 
                 ctx.fillStyle = t.side === 'buy' ? '#22c55e' : '#ef4444';
                 ctx.beginPath();
                 if (t.side === 'buy') {
-                    ctx.moveTo(x, y - 12);
-                    ctx.lineTo(x - 6, y - 4);
-                    ctx.lineTo(x + 6, y - 4);
+                    ctx.moveTo(x, y - 10);
+                    ctx.lineTo(x - 5, y - 2);
+                    ctx.lineTo(x + 5, y - 2);
                 } else {
-                    ctx.moveTo(x, y + 12);
-                    ctx.lineTo(x - 6, y + 4);
-                    ctx.lineTo(x + 6, y + 4);
+                    ctx.moveTo(x, y + 10);
+                    ctx.lineTo(x - 5, y + 2);
+                    ctx.lineTo(x + 5, y + 2);
                 }
                 ctx.closePath();
                 ctx.fill();
             });
-
-            // Цена
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = '11px monospace';
-            ctx.textAlign = 'right';
-            ctx.fillText(max.toFixed(2), pad.left + chartW, pad.top + 14);
-            ctx.fillText(min.toFixed(2), pad.left + chartW, pad.top + chartH + 14);
+            
+            // Подписи
+            ctx.fillStyle = '#64748b';
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'center';
+            
+            const times = data.map(d => new Date(d.time));
+            const step = Math.max(1, Math.floor(data.length / 6));
+            for (let i = 0; i < data.length; i += step) {
+                const x = pad.left + (i / (data.length - 1)) * chartW;
+                const t = times[i];
+                ctx.fillText(t.getHours() + ':' + String(t.getMinutes()).padStart(2, '0'), x, H - 5);
+            }
         }
 
         // ---------- MOEX API ----------
@@ -245,37 +283,6 @@
             }
         }
 
-        async function fetchCandles(instrument, count = 50) {
-            try {
-                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
-                const now = new Date();
-                const from = new Date(now);
-                from.setMinutes(from.getMinutes() - 60);
-                
-                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
-                const params = new URLSearchParams({
-                    from: from.toISOString().slice(0,16),
-                    till: now.toISOString().slice(0,16),
-                    interval: 1,
-                });
-                
-                const resp = await fetch(`${url}?${params}`);
-                const data = await resp.json();
-                const candles = data.candles.data || [];
-                const cols = data.candles.columns || [];
-                
-                return candles.slice(-count).map(row => ({
-                    time: Math.floor(new Date(row[cols.indexOf('begin')]).getTime() / 1000),
-                    open: row[cols.indexOf('open')],
-                    high: row[cols.indexOf('high')],
-                    low: row[cols.indexOf('low')],
-                    close: row[cols.indexOf('close')],
-                }));
-            } catch {
-                return [];
-            }
-        }
-
         // ---------- ТОРГОВЛЯ ----------
         function executeTrade(instrument, side, price) {
             const pos = STATE.positions[instrument];
@@ -293,7 +300,7 @@
                 const trade = {
                     id: Date.now(),
                     instrument,
-                    side: 'sell',
+                    side: pos.side === 'buy' ? 'sell' : 'buy',
                     price: Math.round(price * 100) / 100,
                     profit: Math.round(profit * 100) / 100,
                     timestamp: new Date().toISOString(),
@@ -305,7 +312,6 @@
                 if (profit > 0) STATE.stats.wins++; else STATE.stats.losses++;
                 STATE.stats.profit += profit;
                 render();
-                updateChart();
             }
         }
 
@@ -382,14 +388,9 @@
                     </tr>
                 `).join('');
             }
-        }
-
-        // ---------- ОБНОВЛЕНИЕ ГРАФИКА ----------
-        function updateChart() {
-            const canvas = document.getElementById('chartCanvas');
-            if (canvas) {
-                drawChart(canvas, STATE.chartData, STATE.trades);
-            }
+            
+            // Обновляем график
+            drawPriceChart();
         }
 
         // ---------- УПРАВЛЕНИЕ ----------
@@ -402,15 +403,19 @@
         async function updateAll() {
             try {
                 const rts = await fetchQuote('RTS');
-                const si = await fetchQuote('Si');
-                if (rts) STATE.quotes.RTS = rts;
-                if (si) STATE.quotes.Si = si;
-                
-                const candles = await fetchCandles('RTS');
-                if (candles.length > 0) {
-                    STATE.chartData = candles;
-                    updateChart();
+                if (rts && rts.price > 0) {
+                    STATE.quotes.RTS = rts;
+                    STATE.priceHistory.push({
+                        time: Date.now(),
+                        price: rts.price
+                    });
+                    if (STATE.priceHistory.length > STATE.maxPoints) {
+                        STATE.priceHistory = STATE.priceHistory.slice(-STATE.maxPoints);
+                    }
                 }
+                
+                const si = await fetchQuote('Si');
+                if (si) STATE.quotes.Si = si;
                 
                 runStrategies();
                 render();
@@ -424,9 +429,9 @@
         // ---------- ИНИЦИАЛИЗАЦИЯ ----------
         document.addEventListener('DOMContentLoaded', () => {
             updateAll();
-            
-            // Обновление графика при ресайзе
-            window.addEventListener('resize', updateChart);
+            window.addEventListener('resize', () => {
+                drawPriceChart();
+            });
         });
     </script>
 </body>
