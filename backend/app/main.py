@@ -4,6 +4,10 @@ import logging
 
 from app.api.routes import router
 from app.core.config import settings
+from app.core.database import engine, Base
+
+# Создание таблиц
+Base.metadata.create_all(bind=engine)
 
 # Настройка логирования
 logging.basicConfig(
@@ -15,19 +19,18 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Futures Scalping Bot API",
     description="API для автоматической торговли фьючерсами RTS и Si",
-    version="0.1.0"
+    version="0.2.0"
 )
 
-# Разрешаем CORS для фронтенда
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене заменить на конкретный домен
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Подключаем роуты
 app.include_router(router, prefix="/api")
 
 @app.get("/")
@@ -35,23 +38,12 @@ async def root():
     return {
         "message": "Futures Scalping Bot API",
         "status": "running",
-        "version": "0.1.0"
+        "version": "0.2.0"
     }
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-@app.on_event("startup")
-async def startup_event():
-    """Действия при запуске приложения"""
-    logger.info("Запуск Futures Scalping Bot API")
-    logger.info(f"Настройки: {settings.dict()}")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Действия при остановке приложения"""
-    logger.info("Остановка Futures Scalping Bot API")
 
 if __name__ == "__main__":
     import uvicorn
