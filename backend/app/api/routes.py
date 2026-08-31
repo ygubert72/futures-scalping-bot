@@ -15,6 +15,9 @@ router = APIRouter()
 active_strategies = {}
 ws_connections = []
 
+# ============================================================
+#  СТАТУС
+# ============================================================
 @router.get("/status")
 async def get_status():
     """Получить статус системы"""
@@ -27,8 +30,114 @@ async def get_status():
         "connections": len(ws_connections)
     }
 
-# ... остальные эндпоинты остаются без изменений ...
+# ============================================================
+#  БАЛАНС
+# ============================================================
+@router.get("/balance")
+async def get_balance():
+    """Получить баланс демо-счёта"""
+    return demo_account.get_balance()
 
+# ============================================================
+#  СТАТИСТИКА
+# ============================================================
+@router.get("/stats")
+async def get_stats():
+    """Получить статистику"""
+    return demo_account.get_stats()
+
+# ============================================================
+#  СДЕЛКИ
+# ============================================================
+@router.get("/trades")
+async def get_trades(limit: int = 20):
+    """Получить последние сделки"""
+    return demo_account.trades[-limit:] if demo_account.trades else []
+
+# ============================================================
+#  КОТИРОВКИ
+# ============================================================
+@router.get("/quote/{instrument}")
+async def get_quote(instrument: str):
+    """Получить текущую котировку"""
+    if instrument not in ["RTS", "Si"]:
+        raise HTTPException(status_code=400, detail="Неизвестный инструмент")
+    quote = await market_data.get_quote(instrument)
+    if not quote:
+        raise HTTPException(status_code=503, detail="Нет данных от MOEX")
+    return quote
+
+# ============================================================
+#  ЗАПУСК СТРАТЕГИИ
+# ============================================================
+@router.post("/strategies/start")
+async def start_strategy(instrument: str, strategy_type: str = "impulse"):
+    """Запустить стратегию"""
+    if instrument not in ["RTS", "Si"]:
+        raise HTTPException(status_code=400, detail="Неподдерживаемый инструмент")
+    
+    if strategy_type == "impulse":
+        strategy = ImpulseStrategy(instrument, demo_account)
+    elif strategy_type == "level":
+        strategy = LevelStrategy(instrument, demo_account)
+    else:
+        raise HTTPException(status_code=400, detail="Неподдерживаемая стратегия")
+    
+    await strategy.start()
+    key = f"{instrument}_{strategy_type}"
+    active_strategies[key] = strategy
+    
+    return {
+        "status": "started",
+        "instrument": instrument,
+        "strategy": strategy_type,
+        "message": f"Стратегия {strategy_type} запущена для {instrument}"
+    }
+
+# ============================================================
+#  ОСТАНОВКА СТРАТЕГИИ
+# ============================================================
+@router.post("/strategies/stop")
+async def stop_strategy(instrument: str, strategy_type: str = "impulse"):
+    """Остановить стратегию"""
+    key = f"{instrument}_{strategy_type}"
+    if key in active_strategies:
+        await active_strategies[key].stop()
+        del active_strategies[key]
+        return {"status": "stopped", "instrument": instrument, "strategy": strategy_type}
+    raise HTTPException(status_code=404, detail="Стратегия не найдена")
+
+# ============================================================
+#  СПИСОК СТРАТЕГИЙ
+# ============================================================
+@router.get("/strategies")
+async def list_strategies():
+    """Получить список активных стратегий"""
+    result = []
+    for key, strategy in active_strategies.items():
+        result.append({
+            "key": key,
+            "instrument": strategy.instrument,
+            "name": strategy.name,
+            "is_active": strategy.is_active,
+            "stats": strategy.get_stats()
+        })
+    return result
+
+# ============================================================
+#  ЗАКРЫТИЕ ПОЗИЦИИ
+# ============================================================
+@router.post("/trade/close")
+async def close_position(instrument: str):
+    """Закрыть позицию по инструменту"""
+    result = await demo_account.close_position(instrument)
+    if not result:
+        raise HTTPException(status_code=400, detail="Нет открытой позиции")
+    return {"status": "closed", "trade": result}
+
+# ============================================================
+#  WEBSOCKET
+# ============================================================
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket для реального времени"""
@@ -46,10 +155,8 @@ async def websocket_endpoint(websocket: WebSocket):
         import asyncio
         while True:
             try:
-                # Получаем статус рынка
                 market_open = MarketHours.is_market_open()
                 
-                # Получаем котировки только если рынок открыт
                 rts_quote = None
                 si_quote = None
                 
@@ -57,10 +164,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     rts_quote = await market_data.get_quote("RTS")
                     si_quote = await market_data.get_quote("Si")
                 else:
-                    # Если рынок закрыт, используем последние данные
                     logger.debug("Рынок закрыт, котировки не обновляются")
                 
-                # Получаем баланс и статистику
                 balance = demo_account.get_balance()
                 stats = demo_account.get_stats()
                 
@@ -81,7 +186,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     "trades": demo_account.trades[-10:]
                 })
                 
-                # Если рынок закрыт, увеличиваем интервал до 60 секунд
                 interval = 2 if market_open else 60
                 await asyncio.sleep(interval)
                 
