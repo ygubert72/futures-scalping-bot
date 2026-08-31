@@ -167,7 +167,6 @@
         //  АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ
         // ============================================================
         const INSTRUMENT_CODES = { RTS: null, Si: null };
-        let codesDetected = false;
 
         async function detectInstrumentCodes() {
             try {
@@ -211,14 +210,11 @@
                     INSTRUMENT_CODES.Si = sortedSi[0].secid;
                     console.log(`✅ Найден Si: ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
                 }
-                
-                codesDetected = true;
                 return true;
             } catch (e) {
                 console.warn('⚠️ Не удалось определить коды, используем запасные:', e);
                 INSTRUMENT_CODES.RTS = 'RIU6';
                 INSTRUMENT_CODES.Si = 'SIU6';
-                codesDetected = true;
                 return true;
             }
         }
@@ -233,7 +229,8 @@
             quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
             positions: { RTS: null, Si: null },
             stats: { total: 0, wins: 0, losses: 0, profit: 0 },
-            allCandles: [],
+            // Раздельные данные для каждого инструмента
+            candles: { RTS: [], Si: [] },
             visibleCandles: [],
             interval: 1,
             visibleCount: 60,
@@ -248,11 +245,10 @@
         // ============================================================
         //  ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ
         // ============================================================
-        function generateTestCandles(count, startPrice = 124500) {
+        function generateTestCandles(count, startPrice, stepMinutes = 1) {
             const now = Date.now();
             const candles = [];
             let price = startPrice;
-            const stepMinutes = STATE.interval || 1;
             for (let i = 0; i < count; i++) {
                 const change = (Math.random() - 0.5) * 300 * Math.sqrt(stepMinutes / 5);
                 const open = price;
@@ -277,10 +273,7 @@
         async function fetchCandlesFromMOEX(instrument, interval = 1) {
             try {
                 const sec = INSTRUMENT_CODES[instrument];
-                if (!sec) {
-                    console.warn(`⚠️ Нет кода для ${instrument}`);
-                    return null;
-                }
+                if (!sec) return null;
                 
                 const now = new Date();
                 const from = new Date(now);
@@ -355,7 +348,11 @@
             document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
             document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
             
-            await loadData(instrument);
+            // Загружаем данные для выбранного инструмента, если их нет
+            if (STATE.candles[instrument].length === 0) {
+                await loadCandles(instrument);
+            }
+            drawCandleChart();
         };
 
         // ============================================================
@@ -392,7 +389,8 @@
             ctx.fillStyle = '#0f172a';
             ctx.fillRect(0, 0, W, H);
             
-            let candles = STATE.allCandles;
+            const inst = STATE.currentInstrument || 'RTS';
+            let candles = STATE.candles[inst] || [];
             if (candles.length === 0) {
                 ctx.fillStyle = '#475569';
                 ctx.font = '14px sans-serif';
@@ -478,7 +476,13 @@
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
             
+            // ============================================================
+            //  ТОЛЬКО СДЕЛКИ ПО ТЕКУЩЕМУ ИНСТРУМЕНТУ
+            // ============================================================
             STATE.trades.forEach(t => {
+                // Показываем только сделки по текущему инструменту
+                if (t.instrument !== inst) return;
+                
                 const tTime = new Date(t.timestamp).getTime();
                 let candleIdx = -1;
                 let minDiff = Infinity;
@@ -510,6 +514,12 @@
                 }
                 ctx.closePath();
                 ctx.fill();
+                
+                // Подпись
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '8px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(t.side === 'buy' ? '▲' : '▼', x, t.side === 'buy' ? y - 18 : y + 22);
             });
             
             if (visible.length > 0) {
@@ -587,7 +597,7 @@
                     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     STATE.interval = parseInt(btn.dataset.interval);
-                    loadData(STATE.currentInstrument || 'RTS');
+                    loadCandles(STATE.currentInstrument || 'RTS');
                 });
             });
             
@@ -608,12 +618,12 @@
         // ============================================================
         //  ЗАГРУЗКА ДАННЫХ
         // ============================================================
-        async function loadData(instrument = 'RTS') {
+        async function loadCandles(instrument = 'RTS') {
             const interval = STATE.interval;
             const candles = await fetchCandlesFromMOEX(instrument, interval);
             if (candles && candles.length > 10) {
-                STATE.allCandles = candles;
-                console.log(`✅ Загружено свечей (${interval}м):`, candles.length);
+                STATE.candles[instrument] = candles;
+                console.log(`✅ Загружено свечей (${instrument}, ${interval}м):`, candles.length);
             } else {
                 let count = 100;
                 if (interval === 1) count = 60;
@@ -622,8 +632,8 @@
                 else if (interval === 60) count = 70;
                 else if (interval === 240) count = 60;
                 const startPrice = instrument === 'RTS' ? 124500 : 89.45;
-                STATE.allCandles = generateTestCandles(count, startPrice);
-                console.log('📊 Используются тестовые свечи:', STATE.allCandles.length);
+                STATE.candles[instrument] = generateTestCandles(count, startPrice, interval);
+                console.log(`📊 Используются тестовые свечи (${instrument}):`, STATE.candles[instrument].length);
             }
             drawCandleChart();
         }
@@ -764,7 +774,6 @@
         // ============================================================
         async function exportToExcel() {
             try {
-                // Загружаем библиотеку SheetJS
                 if (typeof XLSX === 'undefined') {
                     await loadScript('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
                 }
@@ -774,7 +783,6 @@
                 const profit = Math.round(s.profit * 100) / 100;
                 const total = s.total || 0;
 
-                // 1. Лист "Статистика"
                 const statsData = [
                     ['ПОКАЗАТЕЛЬ', 'ЗНАЧЕНИЕ'],
                     ['Дата отчёта', new Date().toLocaleString()],
@@ -791,7 +799,6 @@
                     ['Профит-фактор', total > 0 ? (s.wins / (s.losses || 1)).toFixed(2) : 0],
                 ];
 
-                // 2. Лист "Сделки"
                 const tradesData = [
                     ['№', 'Время', 'Инструмент', 'Направление', 'Цена', 'P&L (₽)']
                 ];
@@ -806,7 +813,6 @@
                     ]);
                 });
 
-                // 3. Лист "Стратегии"
                 const strategyData = [
                     ['ПАРАМЕТР', 'RTS', 'Si'],
                     ['Тип стратегии', 'Импульсный пробой', 'Отскок от уровней'],
@@ -862,8 +868,10 @@
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
                 
-                if (STATE.allCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
-                    const last = STATE.allCandles[STATE.allCandles.length-1];
+                // Обновляем последнюю свечу для текущего инструмента
+                const candles = STATE.candles[inst];
+                if (candles.length > 0 && STATE.quotes[inst]?.price > 0) {
+                    const last = candles[candles.length-1];
                     const now = Date.now();
                     if (last && now - last.time > 120000) {
                         const newCandle = {
@@ -873,9 +881,9 @@
                             low: STATE.quotes[inst].price,
                             close: STATE.quotes[inst].price,
                         };
-                        STATE.allCandles.push(newCandle);
-                        if (STATE.allCandles.length > 500) {
-                            STATE.allCandles = STATE.allCandles.slice(-500);
+                        candles.push(newCandle);
+                        if (candles.length > 500) {
+                            STATE.candles[inst] = candles.slice(-500);
                         }
                     } else if (last) {
                         last.close = STATE.quotes[inst].price;
@@ -907,7 +915,8 @@
             
             setupChartControls();
             
-            await loadData('RTS');
+            // Загружаем данные для RTS
+            await loadCandles('RTS');
             
             const rts = await fetchQuote('RTS');
             if (rts) STATE.quotes.RTS = rts;
@@ -916,7 +925,6 @@
             
             updateAll();
             
-            // Навешиваем обработчик на кнопку экспорта
             document.getElementById('exportBtn').addEventListener('click', exportToExcel);
             
             window.addEventListener('resize', () => {
