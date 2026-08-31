@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import useWebSocket from 'react-use-websocket';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000/api';
-const WS_URL = 'ws://localhost:8000/api/ws';
+const API_URL = 'https://ygubert72.github.io/futures-scalping-bot/api';
+const WS_URL = 'wss://ygubert72.github.io/futures-scalping-bot/ws';
 
 interface Quote {
   price: number;
