@@ -8,41 +8,52 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; overflow: hidden; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 12px; height: 100vh; display: flex; flex-direction: column; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #1e293b; flex-shrink: 0; }
-        .header h1 { font-size: 20px; color: #f1f5f9; }
+        .container { max-width: 1500px; margin: 0 auto; padding: 10px; height: 100vh; display: flex; flex-direction: column; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid #1e293b; flex-shrink: 0; }
+        .header h1 { font-size: 18px; color: #f1f5f9; }
         .balance { text-align: right; }
-        .balance .label { font-size: 11px; color: #94a3b8; }
-        .balance .amount { font-size: 22px; font-weight: bold; color: #22c55e; }
-        .grid { display: grid; grid-template-columns: 1fr 320px; gap: 12px; flex: 1; min-height: 0; padding-top: 10px; }
-        .card { background: #1e293b; border-radius: 12px; padding: 12px; border: 1px solid #334155; display: flex; flex-direction: column; }
-        .card-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
-        #chart-container { flex: 1; min-height: 0; position: relative; }
-        #candleChart { width: 100%; height: 100%; display: block; background: #0f172a; border-radius: 8px; }
-        .right-panel { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
-        .strategy-btn { padding: 4px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; color: white; transition: all 0.2s; }
+        .balance .label { font-size: 10px; color: #94a3b8; }
+        .balance .amount { font-size: 20px; font-weight: bold; color: #22c55e; }
+        .grid { display: grid; grid-template-columns: 1fr 300px; gap: 10px; flex: 1; min-height: 0; padding-top: 8px; }
+        .card { background: #1e293b; border-radius: 10px; padding: 10px; border: 1px solid #334155; display: flex; flex-direction: column; }
+        .card-title { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+        #chart-container { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+        #candleChart { width: 100%; height: 100%; display: block; background: #0f172a; border-radius: 6px; cursor: grab; }
+        #candleChart:active { cursor: grabbing; }
+        .chart-controls { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding: 6px 0; }
+        .chart-controls button { 
+            background: #334155; border: none; color: #94a3b8; padding: 2px 10px; border-radius: 4px; 
+            font-size: 11px; cursor: pointer; transition: all 0.2s; 
+        }
+        .chart-controls button:hover { background: #475569; color: #e2e8f0; }
+        .chart-controls button.active { background: #22c55e; color: white; }
+        .right-panel { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+        .strategy-btn { padding: 3px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; color: white; transition: all 0.2s; }
         .strategy-btn.active { background: #22c55e; }
         .strategy-btn.active:hover { background: #16a34a; }
         .strategy-btn.inactive { background: #64748b; }
         .strategy-btn.inactive:hover { background: #475569; }
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex-shrink: 0; }
-        .stat-item { background: #0f172a; padding: 6px 10px; border-radius: 6px; text-align: center; }
-        .stat-item .value { font-size: 16px; font-weight: bold; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; flex-shrink: 0; }
+        .stat-item { background: #0f172a; padding: 4px 8px; border-radius: 4px; text-align: center; }
+        .stat-item .value { font-size: 14px; font-weight: bold; }
         .stat-item .value.green { color: #22c55e; }
         .stat-item .value.red { color: #ef4444; }
         .stat-item .value.yellow { color: #eab308; }
-        .stat-item .label { font-size: 10px; color: #94a3b8; }
+        .stat-item .label { font-size: 9px; color: #94a3b8; }
         .trades-table { flex: 1; overflow: hidden; }
         .trades-table .scroll { height: 100%; overflow-y: auto; }
-        .trades-table table { width: 100%; font-size: 12px; border-collapse: collapse; }
-        .trades-table th { text-align: left; padding: 4px 4px; color: #94a3b8; font-weight: 500; border-bottom: 1px solid #1e293b; position: sticky; top: 0; background: #1e293b; }
-        .trades-table td { padding: 4px 4px; border-bottom: 1px solid #1e293b; }
-        .badge { padding: 2px 6px; border-radius: 3px; font-size: 10px; }
+        .trades-table table { width: 100%; font-size: 11px; border-collapse: collapse; }
+        .trades-table th { text-align: left; padding: 3px 3px; color: #94a3b8; font-weight: 500; border-bottom: 1px solid #1e293b; position: sticky; top: 0; background: #1e293b; }
+        .trades-table td { padding: 3px 3px; border-bottom: 1px solid #1e293b; }
+        .badge { padding: 1px 5px; border-radius: 3px; font-size: 9px; }
         .badge.buy { background: #166534; color: #86efac; }
         .badge.sell { background: #7f1d1d; color: #fca5a5; }
         .profit-positive { color: #22c55e; }
         .profit-negative { color: #ef4444; }
-        .tv-lightweight-charts { width: 100% !important; height: 100% !important; }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+        .zoom-info { font-size: 10px; color: #64748b; text-align: right; flex-shrink: 0; }
     </style>
 </head>
 <body>
@@ -52,7 +63,7 @@
             <div class="header">
                 <div>
                     <h1>📊 Scalping Bot</h1>
-                    <div style="display:flex;gap:16px;font-size:12px;color:#94a3b8;margin-top:2px;">
+                    <div style="display:flex;gap:14px;font-size:11px;color:#94a3b8;margin-top:1px;">
                         <span id="rtsQuote">RTS: --</span>
                         <span id="siQuote">Si: --</span>
                     </div>
@@ -67,28 +78,41 @@
             <div class="grid">
                 <!-- График -->
                 <div class="card">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-                        <div class="card-title">📈 ГРАФИК RTS (СВЕЧИ)</div>
-                        <span style="font-size:10px;color:#64748b;" id="priceLabel">--</span>
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;flex-wrap:wrap;gap:4px;">
+                        <div class="card-title">📈 ГРАФИК RTS</div>
+                        <div class="chart-controls" id="timeframeControls">
+                            <button data-interval="1" class="active">1м</button>
+                            <button data-interval="5">5м</button>
+                            <button data-interval="15">15м</button>
+                            <button data-interval="60">1ч</button>
+                            <button data-interval="240">4ч</button>
+                        </div>
                     </div>
-                    <div id="chart-container" style="flex:1;min-height:0;position:relative;">
+                    <div id="chart-container">
                         <canvas id="candleChart"></canvas>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;flex-shrink:0;padding-top:4px;">
+                        <div style="font-size:10px;color:#64748b;">
+                            <span id="candleCount">0</span> свечей · 
+                            <span id="timeframeLabel">1м</span>
+                        </div>
+                        <div class="zoom-info">
+                            Колёсико: масштаб | Shift+Drag: сдвиг
+                        </div>
                     </div>
                 </div>
                 
                 <!-- Правая панель -->
                 <div class="right-panel">
-                    <!-- Управление -->
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">⚡ УПРАВЛЕНИЕ</div>
-                        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                        <div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
                             <button id="rtsBtn" class="strategy-btn inactive" onclick="toggleStrategy('RTS')">▶ RTS</button>
                             <button id="siBtn" class="strategy-btn inactive" onclick="toggleStrategy('Si')">▶ Si</button>
                         </div>
-                        <div id="strategyStatus" style="font-size:12px;color:#94a3b8;">⏸ Остановлены</div>
+                        <div id="strategyStatus" style="font-size:11px;color:#94a3b8;">⏸ Остановлены</div>
                     </div>
                     
-                    <!-- Статистика -->
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">📊 СТАТИСТИКА</div>
                         <div class="stats-grid">
@@ -99,15 +123,14 @@
                         </div>
                     </div>
                     
-                    <!-- Сделки -->
                     <div class="card" style="flex:1;min-height:0;">
-                        <div class="card-title">📋 ПОСЛЕДНИЕ СДЕЛКИ</div>
+                        <div class="card-title">📋 СДЕЛКИ</div>
                         <div class="trades-table">
                             <div class="scroll">
                                 <table>
                                     <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Цена</th><th style="text-align:right;">P&L</th></tr></thead>
                                     <tbody id="tradesBody">
-                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:12px 0;">Нет сделок</td></tr>
+                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -119,9 +142,9 @@
     </div>
 
     <script>
-        // ============================================
-        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК (CANVAS)
-        // ============================================
+        // ============================================================
+        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК С МАСШТАБИРОВАНИЕМ
+        // ============================================================
         
         // ---------- СОСТОЯНИЕ ----------
         const STATE = {
@@ -131,11 +154,96 @@
             quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
             positions: { RTS: null, Si: null },
             stats: { total: 0, wins: 0, losses: 0, profit: 0 },
-            candles: [],
-            maxCandles: 60
+            allCandles: [],
+            visibleCandles: [],
+            interval: 1,          // минуты
+            visibleCount: 60,     // сколько свечей показываем
+            zoomLevel: 1,
+            offset: 0,            // сдвиг в свечах
         };
 
-        // ---------- ГРАФИК СО СВЕЧАМИ ----------
+        // ---------- ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ ----------
+        function generateTestCandles(count, startPrice = 124500) {
+            const now = Date.now();
+            const candles = [];
+            let price = startPrice;
+            for (let i = 0; i < count; i++) {
+                const change = (Math.random() - 0.5) * 300;
+                const open = price;
+                const close = price + change;
+                const high = Math.max(open, close) + Math.random() * 80;
+                const low = Math.min(open, close) - Math.random() * 80;
+                candles.push({
+                    time: now - (count - i) * 60000,
+                    open: Math.round(open * 100) / 100,
+                    high: Math.round(high * 100) / 100,
+                    low: Math.round(low * 100) / 100,
+                    close: Math.round(close * 100) / 100
+                });
+                price = close;
+            }
+            return candles;
+        }
+
+        // ---------- ЗАГРУЗКА С MOEX ----------
+        async function fetchCandlesFromMOEX(instrument, interval = 1, count = 200) {
+            try {
+                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
+                const now = new Date();
+                const from = new Date(now);
+                from.setDate(from.getDate() - 7);
+                
+                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
+                const params = new URLSearchParams({
+                    from: from.toISOString().slice(0,16),
+                    till: now.toISOString().slice(0,16),
+                    interval: interval,
+                });
+                
+                const resp = await fetch(`${url}?${params}`);
+                const data = await resp.json();
+                const candles = data.candles?.data || [];
+                const cols = data.candles?.columns || [];
+                
+                if (candles.length === 0) return null;
+                
+                return candles.map(row => ({
+                    time: new Date(row[cols.indexOf('begin')]).getTime(),
+                    open: row[cols.indexOf('open')],
+                    high: row[cols.indexOf('high')],
+                    low: row[cols.indexOf('low')],
+                    close: row[cols.indexOf('close')],
+                }));
+            } catch (e) {
+                console.warn('MOEX ошибка:', e);
+                return null;
+            }
+        }
+
+        async function fetchQuote(instrument) {
+            try {
+                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
+                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                const row = data.marketdata?.data?.[0];
+                const cols = data.marketdata?.columns || [];
+                const price = row?.[cols.indexOf('LAST')] || 0;
+                const open = row?.[cols.indexOf('OPEN')] || price;
+                const change = open ? ((price - open) / open) * 100 : 0;
+                return { price, change };
+            } catch {
+                return null;
+            }
+        }
+
+        // ---------- ГРАФИК ----------
+        let chartState = {
+            isDragging: false,
+            dragStartX: 0,
+            dragStartOffset: 0,
+        };
+
         function drawCandleChart() {
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
@@ -154,7 +262,7 @@
             
             const W = rect.width;
             const H = rect.height;
-            const pad = { top: 20, bottom: 25, left: 50, right: 20 };
+            const pad = { top: 20, bottom: 25, left: 55, right: 20 };
             const chartW = W - pad.left - pad.right;
             const chartH = H - pad.top - pad.bottom;
             
@@ -162,7 +270,8 @@
             ctx.fillStyle = '#0f172a';
             ctx.fillRect(0, 0, W, H);
             
-            const candles = STATE.candles;
+            // Данные
+            let candles = STATE.allCandles;
             if (candles.length === 0) {
                 ctx.fillStyle = '#475569';
                 ctx.font = '14px sans-serif';
@@ -171,15 +280,40 @@
                 return;
             }
             
-            // Находим min/max
+            // Применяем смещение и масштаб
+            const totalVisible = Math.floor(STATE.visibleCount / STATE.zoomLevel);
+            let startIdx = Math.max(0, candles.length - totalVisible - STATE.offset);
+            let endIdx = Math.min(candles.length, startIdx + totalVisible);
+            
+            // Корректировка при выходе за границы
+            if (endIdx - startIdx < 2) {
+                startIdx = Math.max(0, candles.length - totalVisible);
+                endIdx = candles.length;
+            }
+            
+            const visible = candles.slice(startIdx, endIdx);
+            STATE.visibleCandles = visible;
+            
+            if (visible.length < 2) {
+                ctx.fillStyle = '#475569';
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Недостаточно данных', W/2, H/2);
+                return;
+            }
+            
+            // Min/Max
             let min = Infinity, max = -Infinity;
-            candles.forEach(c => {
+            visible.forEach(c => {
                 if (c.low < min) min = c.low;
                 if (c.high > max) max = c.high;
             });
             const range = max - min || 1;
+            const padding = range * 0.05;
+            min -= padding;
+            max += padding;
             
-            // Рисуем сетку
+            // Сетка
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 0.5;
             for (let i = 0; i <= 4; i++) {
@@ -189,54 +323,60 @@
                 ctx.lineTo(W - pad.right, y);
                 ctx.stroke();
                 
-                const price = max - (i / 4) * range;
+                const price = max - (i / 4) * (max - min);
                 ctx.fillStyle = '#64748b';
                 ctx.font = '10px monospace';
                 ctx.textAlign = 'right';
                 ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
             }
             
-            // Ширина свечи
-            const candleWidth = Math.min((chartW / candles.length) * 0.7, 15);
-            const gap = (chartW / candles.length) * 0.3;
+            // Свечи
+            const candleWidth = Math.max(2, Math.min((chartW / visible.length) * 0.7, 20));
+            const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
             
-            // Рисуем свечи
-            candles.forEach((c, i) => {
-                const x = pad.left + (i / candles.length) * chartW + gap/2;
-                const yHigh = pad.top + chartH - ((c.high - min) / range) * chartH;
-                const yLow = pad.top + chartH - ((c.low - min) / range) * chartH;
-                const yOpen = pad.top + chartH - ((c.open - min) / range) * chartH;
-                const yClose = pad.top + chartH - ((c.close - min) / range) * chartH;
+            visible.forEach((c, i) => {
+                const x = pad.left + (i / visible.length) * chartW + gap/2;
+                const yHigh = pad.top + chartH - ((c.high - min) / (max - min)) * chartH;
+                const yLow = pad.top + chartH - ((c.low - min) / (max - min)) * chartH;
+                const yOpen = pad.top + chartH - ((c.open - min) / (max - min)) * chartH;
+                const yClose = pad.top + chartH - ((c.close - min) / (max - min)) * chartH;
                 
                 const isGreen = c.close >= c.open;
                 ctx.fillStyle = isGreen ? '#22c55e' : '#ef4444';
                 ctx.strokeStyle = isGreen ? '#22c55e' : '#ef4444';
                 ctx.lineWidth = 1;
                 
-                // Тень (wick)
+                // Тень
                 ctx.beginPath();
                 ctx.moveTo(x + candleWidth/2, yHigh);
                 ctx.lineTo(x + candleWidth/2, yLow);
                 ctx.stroke();
                 
-                // Тело (body)
+                // Тело
                 const bodyY = Math.min(yOpen, yClose);
                 const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
             
-            // Маркеры сделок (треугольники)
+            // Маркеры сделок
             STATE.trades.forEach(t => {
-                const candleIdx = candles.findIndex(c => {
-                    const cTime = new Date(c.time);
-                    const tTime = new Date(t.timestamp);
-                    return Math.abs(cTime - tTime) < 30000;
-                });
-                if (candleIdx === -1) return;
+                const tTime = new Date(t.timestamp).getTime();
+                let candleIdx = -1;
+                let minDiff = Infinity;
                 
-                const c = candles[candleIdx];
-                const x = pad.left + (candleIdx / candles.length) * chartW + candleWidth/2;
-                const y = pad.top + chartH - ((c.close - min) / range) * chartH;
+                visible.forEach((c, i) => {
+                    const diff = Math.abs(c.time - tTime);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        candleIdx = i;
+                    }
+                });
+                
+                if (candleIdx === -1 || minDiff > 60000) return;
+                
+                const c = visible[candleIdx];
+                const x = pad.left + (candleIdx / visible.length) * chartW + candleWidth/2;
+                const y = pad.top + chartH - ((c.close - min) / (max - min)) * chartH;
                 
                 ctx.fillStyle = t.side === 'buy' ? '#22c55e' : '#ef4444';
                 ctx.beginPath();
@@ -251,109 +391,100 @@
                 }
                 ctx.closePath();
                 ctx.fill();
-                
-                // Подпись
-                ctx.fillStyle = '#94a3b8';
-                ctx.font = '8px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(t.side === 'buy' ? '▲' : '▼', x, t.side === 'buy' ? y - 16 : y + 22);
             });
             
             // Текущая цена
-            const lastCandle = candles[candles.length-1];
-            const lastY = pad.top + chartH - ((lastCandle.close - min) / range) * chartH;
-            ctx.fillStyle = '#22c55e';
-            ctx.font = '11px monospace';
-            ctx.textAlign = 'left';
-            ctx.fillText(lastCandle.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
+            if (visible.length > 0) {
+                const last = visible[visible.length-1];
+                const lastY = pad.top + chartH - ((last.close - min) / (max - min)) * chartH;
+                ctx.fillStyle = '#22c55e';
+                ctx.font = '11px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText(last.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
+            }
             
-            // Подписи времени
+            // Время
             ctx.fillStyle = '#64748b';
             ctx.font = '9px sans-serif';
             ctx.textAlign = 'center';
             
-            const step = Math.max(1, Math.floor(candles.length / 8));
-            for (let i = 0; i < candles.length; i += step) {
-                const x = pad.left + (i / candles.length) * chartW + candleWidth/2;
-                const t = new Date(candles[i].time);
+            const step = Math.max(1, Math.floor(visible.length / 8));
+            for (let i = 0; i < visible.length; i += step) {
+                const x = pad.left + (i / visible.length) * chartW + candleWidth/2;
+                const t = new Date(visible[i].time);
                 const label = t.getHours() + ':' + String(t.getMinutes()).padStart(2, '0');
                 ctx.fillText(label, x, H - 5);
             }
+            
+            // Обновляем информацию
+            document.getElementById('candleCount').textContent = visible.length;
+            document.getElementById('timeframeLabel').textContent = 
+                STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
         }
 
-        // ---------- MOEX API ----------
-        async function fetchQuote(instrument) {
-            try {
-                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
-                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
-                const resp = await fetch(url);
-                const data = await resp.json();
-                const row = data.marketdata.data[0];
-                const cols = data.marketdata.columns;
-                const price = row[cols.indexOf('LAST')] || 0;
-                const open = row[cols.indexOf('OPEN')] || price;
-                const change = open ? ((price - open) / open) * 100 : 0;
-                return { price, change };
-            } catch {
-                return null;
-            }
+        // ---------- МАСШТАБИРОВАНИЕ ----------
+        function setupChartControls() {
+            const canvas = document.getElementById('candleChart');
+            if (!canvas) return;
+            
+            // Колёсико — масштаб
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                STATE.zoomLevel = Math.max(0.3, Math.min(10, STATE.zoomLevel + delta));
+                drawCandleChart();
+            }, { passive: false });
+            
+            // Drag — сдвиг
+            canvas.addEventListener('mousedown', (e) => {
+                chartState.isDragging = true;
+                chartState.dragStartX = e.clientX;
+                chartState.dragStartOffset = STATE.offset;
+                canvas.style.cursor = 'grabbing';
+            });
+            
+            window.addEventListener('mousemove', (e) => {
+                if (!chartState.isDragging) return;
+                const dx = e.clientX - chartState.dragStartX;
+                const totalVisible = Math.floor(STATE.visibleCount / STATE.zoomLevel);
+                const dragCandles = Math.round(dx / 5);
+                STATE.offset = Math.max(0, chartState.dragStartOffset - dragCandles);
+                drawCandleChart();
+            });
+            
+            window.addEventListener('mouseup', () => {
+                if (chartState.isDragging) {
+                    chartState.isDragging = false;
+                    canvas.style.cursor = 'grab';
+                }
+            });
+            
+            // Кнопки таймфреймов
+            document.querySelectorAll('#timeframeControls button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('#timeframeControls button').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    STATE.interval = parseInt(btn.dataset.interval);
+                    STATE.zoomLevel = 1;
+                    STATE.offset = 0;
+                    loadData();
+                });
+            });
         }
 
-        async function fetchCandles(instrument, count = 60) {
-            try {
-                const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
-                const now = new Date();
-                const from = new Date(now);
-                from.setHours(from.getHours() - 2);
-                
-                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
-                const params = new URLSearchParams({
-                    from: from.toISOString().slice(0,16),
-                    till: now.toISOString().slice(0,16),
-                    interval: 1,
-                });
-                
-                const resp = await fetch(`${url}?${params}`);
-                const data = await resp.json();
-                const candles = data.candles.data || [];
-                const cols = data.candles.columns || [];
-                
-                const result = candles.slice(-count).map(row => ({
-                    time: new Date(row[cols.indexOf('begin')]).getTime(),
-                    open: row[cols.indexOf('open')],
-                    high: row[cols.indexOf('high')],
-                    low: row[cols.indexOf('low')],
-                    close: row[cols.indexOf('close')],
-                }));
-                
-                return result;
-            } catch (e) {
-                console.warn('Ошибка загрузки свечей:', e);
-                // Генерируем тестовые данные
-                return generateTestCandles(count);
+        // ---------- ЗАГРУЗКА ДАННЫХ ----------
+        async function loadData() {
+            const candles = await fetchCandlesFromMOEX('RTS', STATE.interval, 300);
+            if (candles && candles.length > 10) {
+                STATE.allCandles = candles;
+                console.log('✅ Загружено свечей с MOEX:', candles.length);
+            } else {
+                // Если нет данных — генерируем
+                const count = Math.max(100, STATE.visibleCount * 2);
+                STATE.allCandles = generateTestCandles(count);
+                console.log('📊 Используются тестовые свечи:', STATE.allCandles.length);
             }
-        }
-        
-        function generateTestCandles(count) {
-            const now = Date.now();
-            const candles = [];
-            let price = 124500;
-            for (let i = 0; i < count; i++) {
-                const change = (Math.random() - 0.5) * 200;
-                const open = price;
-                const close = price + change;
-                const high = Math.max(open, close) + Math.random() * 50;
-                const low = Math.min(open, close) - Math.random() * 50;
-                candles.push({
-                    time: now - (count - i) * 60000,
-                    open: open,
-                    high: high,
-                    low: low,
-                    close: close
-                });
-                price = close;
-            }
-            return candles;
+            drawCandleChart();
         }
 
         // ---------- ТОРГОВЛЯ ----------
@@ -388,7 +519,6 @@
             }
         }
 
-        // ---------- СТРАТЕГИИ ----------
         function runStrategies() {
             if (!STATE.strategies.RTS && !STATE.strategies.Si) return;
 
@@ -449,7 +579,7 @@
             const tbody = document.getElementById('tradesBody');
             const trades = STATE.trades.slice(-15).reverse();
             if (trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:12px 0;">Нет сделок</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок</td></tr>';
             } else {
                 tbody.innerHTML = trades.map(t => `
                     <tr>
@@ -462,7 +592,6 @@
                 `).join('');
             }
             
-            // Обновляем график
             drawCandleChart();
         }
 
@@ -475,17 +604,21 @@
         // ---------- ЦИКЛ ОБНОВЛЕНИЯ ----------
         async function updateAll() {
             try {
-                // Котировки
                 const rts = await fetchQuote('RTS');
-                if (rts) STATE.quotes.RTS = rts;
+                if (rts && rts.price > 0) STATE.quotes.RTS = rts;
                 
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
                 
-                // Свечи
-                const candles = await fetchCandles('RTS', STATE.maxCandles);
-                if (candles.length > 0) {
-                    STATE.candles = candles;
+                // Обновляем последнюю свечу если есть данные
+                if (STATE.allCandles.length > 0 && STATE.quotes.RTS.price > 0) {
+                    const last = STATE.allCandles[STATE.allCandles.length-1];
+                    if (last && Date.now() - last.time < 120000) {
+                        // Обновляем только close
+                        last.close = STATE.quotes.RTS.price;
+                        if (last.close > last.high) last.high = last.close;
+                        if (last.close < last.low) last.low = last.close;
+                    }
                 }
                 
                 runStrategies();
@@ -499,7 +632,13 @@
 
         // ---------- ИНИЦИАЛИЗАЦИЯ ----------
         document.addEventListener('DOMContentLoaded', () => {
+            STATE.visibleCount = 60;
+            STATE.zoomLevel = 1;
+            
+            setupChartControls();
+            loadData();
             updateAll();
+            
             window.addEventListener('resize', () => {
                 drawCandleChart();
             });
