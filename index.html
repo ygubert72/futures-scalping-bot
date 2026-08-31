@@ -242,6 +242,7 @@
             quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
             positions: { RTS: null, Si: null },
             stats: { total: 0, wins: 0, losses: 0, profit: 0 },
+            minuteCandles: { RTS: [], Si: [] },
             candles: { RTS: [], Si: [] },
             visibleCandles: [],
             interval: 1,
@@ -265,59 +266,43 @@
         }
 
         // ============================================================
-        //  ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ
+        //  АГРЕГАЦИЯ СВЕЧЕЙ (1м → 5м, 15м, 1ч, 4ч)
         // ============================================================
-        function generateTestCandles(count, startPrice, stepMinutes = 1) {
-            const now = Date.now();
-            const candles = [];
-            let price = startPrice || 78000;
-            const volMultiplier = Math.sqrt(stepMinutes / 5);
-            for (let i = 0; i < count; i++) {
-                const change = (Math.random() - 0.5) * 300 * volMultiplier * 2;
-                const open = price;
-                let close = price + change;
-                if (close < 1000) close = 1000 + Math.random() * 100;
-                const high = Math.max(open, close) + Math.random() * 80 * volMultiplier * 2;
-                const low = Math.min(open, close) - Math.random() * 80 * volMultiplier * 2;
-                candles.push({
-                    time: now - (count - i) * stepMinutes * 60000,
-                    open: Math.round(open * 100) / 100,
-                    high: Math.round(high * 100) / 100,
-                    low: Math.round(low * 100) / 100,
-                    close: Math.round(close * 100) / 100
+        function aggregateCandles(minuteCandles, targetInterval) {
+            if (!minuteCandles || minuteCandles.length === 0) return [];
+            const result = [];
+            const step = targetInterval;
+            for (let i = 0; i < minuteCandles.length; i += step) {
+                const group = minuteCandles.slice(i, i + step);
+                if (group.length < step && i + step < minuteCandles.length) continue;
+                result.push({
+                    time: group[0].time,
+                    open: group[0].open,
+                    high: Math.max(...group.map(c => c.high)),
+                    low: Math.min(...group.map(c => c.low)),
+                    close: group[group.length - 1].close,
                 });
-                price = close;
             }
-            return candles;
+            return result;
         }
 
         // ============================================================
-        //  ЗАГРУЗКА С MOEX
+        //  ЗАГРУЗКА 1М ДАННЫХ
         // ============================================================
-        async function fetchCandlesFromMOEX(instrument, interval = 1) {
+        async function fetchMinuteCandles(instrument) {
             try {
                 const sec = INSTRUMENT_CODES[instrument];
                 if (!sec) return null;
                 
                 const now = new Date();
                 const from = new Date(now);
-                
-                let daysBack = 1;
-                switch(interval) {
-                    case 1: daysBack = 1; break;
-                    case 5: daysBack = 7; break;
-                    case 15: daysBack = 14; break;
-                    case 60: daysBack = 30; break;
-                    case 240: daysBack = 60; break;
-                    default: daysBack = 1;
-                }
-                from.setDate(from.getDate() - daysBack);
+                from.setDate(from.getDate() - 14); // 2 недели 1м данных
                 
                 const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
                 const params = new URLSearchParams({
                     from: from.toISOString().slice(0,16),
                     till: now.toISOString().slice(0,16),
-                    interval: interval,
+                    interval: 1,
                 });
                 
                 const resp = await fetch(`${url}?${params}`);
@@ -327,8 +312,7 @@
                 
                 if (candles.length === 0) return null;
                 
-                const maxCandles = Math.min(candles.length, 500);
-                return candles.slice(-maxCandles).map(row => ({
+                return candles.map(row => ({
                     time: new Date(row[cols.indexOf('begin')]).getTime(),
                     open: row[cols.indexOf('open')],
                     high: row[cols.indexOf('high')],
@@ -373,11 +357,71 @@
             document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
             document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
             
-            if (STATE.candles[instrument].length === 0) {
-                await loadCandles(instrument);
+            if (STATE.minuteCandles[instrument].length === 0) {
+                await loadMinuteCandles(instrument);
             }
+            updateCandlesForInterval();
             drawCandleChart();
         };
+
+        // ============================================================
+        //  ЗАГРУЗКА И ОБНОВЛЕНИЕ ДАННЫХ
+        // ============================================================
+        async function loadMinuteCandles(instrument = 'RTS') {
+            const candles = await fetchMinuteCandles(instrument);
+            if (candles && candles.length > 10) {
+                STATE.minuteCandles[instrument] = candles;
+                console.log(`✅ Загружено 1м свечей (${instrument}):`, candles.length);
+            } else {
+                // Тестовые данные, если MOEX не отвечает
+                const startPrice = instrument === 'RTS' ? 78000 : 88;
+                STATE.minuteCandles[instrument] = generateTestCandles(200, startPrice, 1);
+                console.log(`📊 Используются тестовые 1м свечи (${instrument})`);
+            }
+            updateCandlesForInterval();
+            drawCandleChart();
+        }
+
+        function updateCandlesForInterval() {
+            const inst = STATE.currentInstrument || 'RTS';
+            const minuteCandles = STATE.minuteCandles[inst] || [];
+            if (minuteCandles.length === 0) return;
+            
+            const interval = STATE.interval;
+            if (interval === 1) {
+                STATE.candles[inst] = minuteCandles;
+            } else {
+                STATE.candles[inst] = aggregateCandles(minuteCandles, interval);
+            }
+            console.log(`📊 Агрегировано ${STATE.candles[inst].length} свечей (${interval}м)`);
+        }
+
+        // ============================================================
+        //  ТЕСТОВЫЕ ДАННЫЕ (ЕСЛИ MOEX НЕ ОТВЕЧАЕТ)
+        // ============================================================
+        function generateTestCandles(count, startPrice, stepMinutes = 1) {
+            const now = Date.now();
+            const candles = [];
+            let price = startPrice;
+            const volMultiplier = Math.sqrt(stepMinutes / 5);
+            for (let i = 0; i < count; i++) {
+                const change = (Math.random() - 0.5) * 300 * volMultiplier * 2;
+                const open = price;
+                let close = price + change;
+                if (close < 1000) close = 1000 + Math.random() * 100;
+                const high = Math.max(open, close) + Math.random() * 80 * volMultiplier * 2;
+                const low = Math.min(open, close) - Math.random() * 80 * volMultiplier * 2;
+                candles.push({
+                    time: now - (count - i) * stepMinutes * 60000,
+                    open: Math.round(open * 100) / 100,
+                    high: Math.round(high * 100) / 100,
+                    low: Math.round(low * 100) / 100,
+                    close: Math.round(close * 100) / 100
+                });
+                price = close;
+            }
+            return candles;
+        }
 
         // ============================================================
         //  ГРАФИК
@@ -626,7 +670,8 @@
                     STATE.offset = 0;
                     STATE.visibleCount = getOptimalCandleCount();
                     
-                    loadCandles(STATE.currentInstrument || 'RTS');
+                    updateCandlesForInterval();
+                    drawCandleChart();
                 });
             });
             
@@ -645,36 +690,7 @@
         }
 
         // ============================================================
-        //  ЗАГРУЗКА ДАННЫХ
-        // ============================================================
-        async function loadCandles(instrument = 'RTS') {
-            const interval = STATE.interval;
-            const candles = await fetchCandlesFromMOEX(instrument, interval);
-            if (candles && candles.length > 10) {
-                STATE.candles[instrument] = candles;
-                console.log(`✅ Загружено свечей (${instrument}, ${interval}м):`, candles.length);
-            } else {
-                let count = 100;
-                if (interval === 1) count = 60;
-                else if (interval === 5) count = 80;
-                else if (interval === 15) count = 80;
-                else if (interval === 60) count = 70;
-                else if (interval === 240) count = 60;
-                // ✅ ИСПОЛЬЗУЕМ ТЕКУЩУЮ ЦЕНУ ДЛЯ СТАРТА
-                let startPrice;
-                if (instrument === 'RTS') {
-                    startPrice = STATE.quotes.RTS.price || 78000;
-                } else {
-                    startPrice = STATE.quotes.Si.price || 89.45;
-                }
-                STATE.candles[instrument] = generateTestCandles(count, startPrice, interval);
-                console.log(`📊 Используются тестовые свечи (${instrument}):`, STATE.candles[instrument].length);
-            }
-            drawCandleChart();
-        }
-
-        // ============================================================
-        //  ТОРГОВЛЯ
+        //  ТОРГОВЛЯ (ИСПОЛЬЗУЕТ 1М ДАННЫЕ)
         // ============================================================
         function executeTrade(instrument, side, price) {
             const pos = STATE.positions[instrument];
@@ -712,12 +728,14 @@
 
             const rts = STATE.quotes.RTS;
             const si = STATE.quotes.Si;
+            const minuteData = STATE.minuteCandles;
 
             if (STATE.strategies.RTS && rts.price > 0) {
                 const pos = STATE.positions.RTS;
+                const candles = minuteData.RTS || [];
                 if (!pos) {
-                    const high = STATE.candles.RTS?.slice(-20).reduce((a,b) => a.high > b.high ? a : b)?.high || rts.price;
-                    const low = STATE.candles.RTS?.slice(-20).reduce((a,b) => a.low < b.low ? a : b)?.low || rts.price;
+                    const high = candles.slice(-20).reduce((a,b) => a.high > b.high ? a : b)?.high || rts.price;
+                    const low = candles.slice(-20).reduce((a,b) => a.low < b.low ? a : b)?.low || rts.price;
                     if (rts.price > high) {
                         executeTrade('RTS', 'buy', rts.price);
                     } else if (rts.price < low) {
@@ -733,8 +751,9 @@
 
             if (STATE.strategies.Si && si.price > 0) {
                 const pos = STATE.positions.Si;
+                const candles = minuteData.Si || [];
                 if (!pos) {
-                    const avg = STATE.candles.Si?.slice(-20).reduce((a,b) => a + b.close, 0) / (STATE.candles.Si?.slice(-20).length || 1) || si.price;
+                    const avg = candles.slice(-20).reduce((a,b) => a + b.close, 0) / (candles.slice(-20).length || 1) || si.price;
                     if (si.price < avg * 0.995) {
                         executeTrade('Si', 'buy', si.price);
                     } else if (si.price > avg * 1.005) {
@@ -912,9 +931,10 @@
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
                 
-                const candles = STATE.candles[inst];
-                if (candles.length > 0 && STATE.quotes[inst]?.price > 0) {
-                    const last = candles[candles.length-1];
+                // Обновляем последнюю 1м свечу
+                const minuteCandles = STATE.minuteCandles[inst];
+                if (minuteCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
+                    const last = minuteCandles[minuteCandles.length-1];
                     const now = Date.now();
                     if (last && now - last.time > 120000) {
                         const newCandle = {
@@ -924,15 +944,17 @@
                             low: STATE.quotes[inst].price,
                             close: STATE.quotes[inst].price,
                         };
-                        candles.push(newCandle);
-                        if (candles.length > 500) {
-                            STATE.candles[inst] = candles.slice(-500);
+                        minuteCandles.push(newCandle);
+                        if (minuteCandles.length > 2000) {
+                            STATE.minuteCandles[inst] = minuteCandles.slice(-1500);
                         }
                     } else if (last) {
                         last.close = STATE.quotes[inst].price;
                         if (last.close > last.high) last.high = last.close;
                         if (last.close < last.low) last.low = last.close;
                     }
+                    // Обновляем агрегированные данные
+                    updateCandlesForInterval();
                 }
                 
                 runStrategies();
@@ -958,7 +980,7 @@
             
             setupChartControls();
             
-            await loadCandles('RTS');
+            await loadMinuteCandles('RTS');
             
             const rts = await fetchQuote('RTS');
             if (rts) STATE.quotes.RTS = rts;
