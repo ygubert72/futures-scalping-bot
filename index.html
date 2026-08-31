@@ -164,7 +164,7 @@
 
     <script>
         // ============================================================
-        //  АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ
+        //  АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ (БЛИЖАЙШИЙ КОНТРАКТ)
         // ============================================================
         const INSTRUMENT_CODES = { RTS: null, Si: null };
 
@@ -177,12 +177,18 @@
                 
                 const secIdx = cols.indexOf('SECID');
                 const nameIdx = cols.indexOf('SHORTNAME');
+                const boardIdx = cols.indexOf('BOARDID');
                 
                 let rtsCodes = [], siCodes = [];
                 
                 rows.forEach(row => {
+                    const board = row[boardIdx];
+                    // Только основная доска RFUD
+                    if (board !== 'RFUD') return;
+                    
                     const secid = row[secIdx];
                     const name = row[nameIdx] || '';
+                    
                     if (name.startsWith('RTS-') || name.startsWith('RTSM-')) {
                         rtsCodes.push({ secid, name });
                     }
@@ -191,11 +197,12 @@
                     }
                 });
                 
+                // Сортировка: БЛИЖАЙШИЙ месяц ПЕРВЫЙ
                 const sortByDate = (arr) => {
                     return arr.sort((a, b) => {
-                        const dateA = a.name.match(/\d{2}\.\d{2}/)?.[0] || '00.00';
-                        const dateB = b.name.match(/\d{2}\.\d{2}/)?.[0] || '00.00';
-                        return dateB.localeCompare(dateA);
+                        const dateA = a.name.match(/\d{2}\.\d{2}/)?.[0] || '99.99';
+                        const dateB = b.name.match(/\d{2}\.\d{2}/)?.[0] || '99.99';
+                        return dateA.localeCompare(dateB);
                     });
                 };
                 
@@ -204,15 +211,26 @@
                 
                 if (sortedRTS.length > 0) {
                     INSTRUMENT_CODES.RTS = sortedRTS[0].secid;
-                    console.log(`✅ Найден RTS: ${sortedRTS[0].name} (${INSTRUMENT_CODES.RTS})`);
+                    console.log(`✅ Найден RTS (ближайший): ${sortedRTS[0].name} (${INSTRUMENT_CODES.RTS})`);
                 }
                 if (sortedSi.length > 0) {
                     INSTRUMENT_CODES.Si = sortedSi[0].secid;
-                    console.log(`✅ Найден Si: ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
+                    console.log(`✅ Найден Si (ближайший): ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
                 }
+                
+                // Если не нашли — запасные коды
+                if (!INSTRUMENT_CODES.RTS) {
+                    INSTRUMENT_CODES.RTS = 'RIU6';
+                    console.warn('⚠️ RTS не найден, используем запасной:', INSTRUMENT_CODES.RTS);
+                }
+                if (!INSTRUMENT_CODES.Si) {
+                    INSTRUMENT_CODES.Si = 'SIU6';
+                    console.warn('⚠️ Si не найден, используем запасной:', INSTRUMENT_CODES.Si);
+                }
+                
                 return true;
             } catch (e) {
-                console.warn('⚠️ Не удалось определить коды, используем запасные:', e);
+                console.warn('⚠️ Ошибка определения кодов:', e);
                 INSTRUMENT_CODES.RTS = 'RIU6';
                 INSTRUMENT_CODES.Si = 'SIU6';
                 return true;
@@ -229,7 +247,6 @@
             quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
             positions: { RTS: null, Si: null },
             stats: { total: 0, wins: 0, losses: 0, profit: 0 },
-            // Раздельные данные для каждого инструмента
             candles: { RTS: [], Si: [] },
             visibleCandles: [],
             interval: 1,
@@ -348,7 +365,6 @@
             document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
             document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
             
-            // Загружаем данные для выбранного инструмента, если их нет
             if (STATE.candles[instrument].length === 0) {
                 await loadCandles(instrument);
             }
@@ -476,11 +492,8 @@
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
             
-            // ============================================================
-            //  ТОЛЬКО СДЕЛКИ ПО ТЕКУЩЕМУ ИНСТРУМЕНТУ
-            // ============================================================
+            // ТОЛЬКО СДЕЛКИ ПО ТЕКУЩЕМУ ИНСТРУМЕНТУ
             STATE.trades.forEach(t => {
-                // Показываем только сделки по текущему инструменту
                 if (t.instrument !== inst) return;
                 
                 const tTime = new Date(t.timestamp).getTime();
@@ -514,12 +527,6 @@
                 }
                 ctx.closePath();
                 ctx.fill();
-                
-                // Подпись
-                ctx.fillStyle = '#94a3b8';
-                ctx.font = '8px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(t.side === 'buy' ? '▲' : '▼', x, t.side === 'buy' ? y - 18 : y + 22);
             });
             
             if (visible.length > 0) {
@@ -681,9 +688,16 @@
             if (STATE.strategies.RTS && rts.price > 0) {
                 const pos = STATE.positions.RTS;
                 if (!pos) {
-                    executeTrade('RTS', 'buy', rts.price);
+                    // Импульсный пробой (упрощённо)
+                    const high = STATE.candles.RTS?.slice(-20).reduce((a,b) => a.high > b.high ? a : b)?.high || rts.price;
+                    const low = STATE.candles.RTS?.slice(-20).reduce((a,b) => a.low < b.low ? a : b)?.low || rts.price;
+                    if (rts.price > high) {
+                        executeTrade('RTS', 'buy', rts.price);
+                    } else if (rts.price < low) {
+                        executeTrade('RTS', 'sell', rts.price);
+                    }
                 } else {
-                    const profit = rts.price - pos.entry;
+                    const profit = pos.side === 'buy' ? rts.price - pos.entry : pos.entry - rts.price;
                     if (profit >= 120 || profit <= -45) {
                         executeTrade('RTS', 'sell', rts.price);
                     }
@@ -693,11 +707,15 @@
             if (STATE.strategies.Si && si.price > 0) {
                 const pos = STATE.positions.Si;
                 if (!pos) {
-                    if (si.price > 90) {
+                    // Отскок от уровней (упрощённо)
+                    const avg = STATE.candles.Si?.slice(-20).reduce((a,b) => a + b.close, 0) / (STATE.candles.Si?.slice(-20).length || 1) || si.price;
+                    if (si.price < avg * 0.995) {
                         executeTrade('Si', 'buy', si.price);
+                    } else if (si.price > avg * 1.005) {
+                        executeTrade('Si', 'sell', si.price);
                     }
                 } else {
-                    const profit = pos.entry - si.price;
+                    const profit = pos.side === 'buy' ? si.price - pos.entry : pos.entry - si.price;
                     if (profit >= 70 || profit <= -25) {
                         executeTrade('Si', 'sell', si.price);
                     }
@@ -868,7 +886,6 @@
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
                 
-                // Обновляем последнюю свечу для текущего инструмента
                 const candles = STATE.candles[inst];
                 if (candles.length > 0 && STATE.quotes[inst]?.price > 0) {
                     const last = candles[candles.length-1];
@@ -908,14 +925,13 @@
             STATE.visibleCount = 60;
             STATE.zoomLevel = 1;
             
-            console.log('🔍 Определение актуальных фьючерсов...');
+            console.log('🔍 Определение актуальных фьючерсов (ближайшие контракты)...');
             await detectInstrumentCodes();
             
             console.log('📊 Используемые коды:', INSTRUMENT_CODES);
             
             setupChartControls();
             
-            // Загружаем данные для RTS
             await loadCandles('RTS');
             
             const rts = await fetchQuote('RTS');
