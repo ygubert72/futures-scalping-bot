@@ -18,7 +18,7 @@
         .card { background: #1e293b; border-radius: 12px; padding: 12px; border: 1px solid #334155; display: flex; flex-direction: column; }
         .card-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
         #chart-container { flex: 1; min-height: 0; position: relative; }
-        #chart { width: 100%; height: 100%; }
+        #chartCanvas { width: 100%; height: 100%; display: block; }
         .right-panel { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
         .strategy-btn { padding: 4px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; color: white; transition: all 0.2s; }
         .strategy-btn.active { background: #22c55e; }
@@ -70,7 +70,7 @@
                         <div class="card-title">📈 ГРАФИК RTS</div>
                     </div>
                     <div id="chart-container" style="flex:1;min-height:0;position:relative;">
-                        <canvas id="chart"></canvas>
+                        <canvas id="chartCanvas"></canvas>
                     </div>
                 </div>
                 
@@ -116,11 +116,9 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
-    </script>
     <script>
         // ============================================
-        //  ТОРГОВЫЙ БОТ + ГРАФИК
+        //  ТОРГОВЫЙ БОТ + ГРАФИК (БЕЗ ВНЕШНИХ БИБЛИОТЕК)
         // ============================================
         
         // ---------- СОСТОЯНИЕ ----------
@@ -134,63 +132,99 @@
             chartData: [],
         };
 
-        // ---------- ГРАФИК ----------
-        let chart = null;
-        let candlestickSeries = null;
+        // ---------- ГРАФИК (СВОЯ РЕАЛИЗАЦИЯ) ----------
+        function drawChart(canvas, candles, trades) {
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-        function initChart() {
-            const container = document.getElementById('chart');
-            if (!container) return;
-            
-            try {
-                chart = LightweightCharts.createChart(container, {
-                    layout: { background: { color: '#0f172a' }, textColor: '#94a3b8' },
-                    grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
-                    timeScale: { timeVisible: true, secondsVisible: true, borderColor: '#1e293b' },
-                    rightPriceScale: { borderColor: '#1e293b' },
-                    width: container.clientWidth,
-                    height: container.clientHeight,
-                });
-                
-                candlestickSeries = chart.addCandlestickSeries({
-                    upColor: '#22c55e',
-                    downColor: '#ef4444',
-                    borderUpColor: '#22c55e',
-                    borderDownColor: '#ef4444',
-                    wickUpColor: '#22c55e',
-                    wickDownColor: '#ef4444',
-                });
+            const W = rect.width;
+            const H = rect.height;
+            const pad = { top: 20, bottom: 20, left: 30, right: 10 };
+            const chartW = W - pad.left - pad.right;
+            const chartH = H - pad.top - pad.bottom;
 
-                window.addEventListener('resize', () => {
-                    const rect = container.getBoundingClientRect();
-                    if (chart) chart.resize(rect.width, rect.height);
-                });
-            } catch (e) {
-                console.error('Ошибка инициализации графика:', e);
+            // Очистка
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            if (!candles || candles.length === 0) {
+                ctx.fillStyle = '#475569';
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Нет данных', W/2, H/2);
+                return;
             }
-        }
 
-        function updateChart(candles, trades) {
-            if (!candlestickSeries) return;
-            
-            try {
-                candlestickSeries.setData(candles);
+            // Находим min/max
+            let min = Infinity, max = -Infinity;
+            candles.forEach(c => {
+                if (c.low < min) min = c.low;
+                if (c.high > max) max = c.high;
+            });
+            const range = max - min || 1;
+            const candleWidth = Math.min(chartW / candles.length * 0.7, 20);
+            const gap = candleWidth * 0.3;
+
+            // Рисуем свечи
+            candles.forEach((c, i) => {
+                const x = pad.left + (i / candles.length) * chartW + gap/2;
+                const yHigh = pad.top + chartH - ((c.high - min) / range) * chartH;
+                const yLow = pad.top + chartH - ((c.low - min) / range) * chartH;
+                const yOpen = pad.top + chartH - ((c.open - min) / range) * chartH;
+                const yClose = pad.top + chartH - ((c.close - min) / range) * chartH;
                 
-                const markers = trades.map(t => {
-                    const time = Math.floor(new Date(t.timestamp).getTime() / 1000);
-                    return {
-                        time: time,
-                        position: t.side === 'buy' ? 'belowBar' : 'aboveBar',
-                        color: t.side === 'buy' ? '#22c55e' : '#ef4444',
-                        shape: t.side === 'buy' ? 'arrowUp' : 'arrowDown',
-                        text: t.side === 'buy' ? '▲' : '▼',
-                        size: 2,
-                    };
-                });
-                candlestickSeries.setMarkers(markers);
-            } catch (e) {
-                console.error('Ошибка обновления графика:', e);
-            }
+                const isGreen = c.close >= c.open;
+                ctx.fillStyle = isGreen ? '#22c55e' : '#ef4444';
+                ctx.strokeStyle = isGreen ? '#22c55e' : '#ef4444';
+                ctx.lineWidth = 1;
+
+                // Тень (wick)
+                ctx.beginPath();
+                ctx.moveTo(x + candleWidth/2, yHigh);
+                ctx.lineTo(x + candleWidth/2, yLow);
+                ctx.stroke();
+
+                // Тело (body)
+                const bodyY = Math.min(yOpen, yClose);
+                const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
+                ctx.fillRect(x, bodyY, candleWidth, bodyH);
+            });
+
+            // Маркеры сделок (треугольники)
+            trades.forEach(t => {
+                const candle = candles.find(c => Math.abs(c.time - new Date(t.timestamp).getTime()/1000) < 30);
+                if (!candle) return;
+                const idx = candles.indexOf(candle);
+                const x = pad.left + (idx / candles.length) * chartW + candleWidth/2;
+                const y = pad.top + chartH - ((candle.close - min) / range) * chartH;
+                
+                ctx.fillStyle = t.side === 'buy' ? '#22c55e' : '#ef4444';
+                ctx.beginPath();
+                if (t.side === 'buy') {
+                    ctx.moveTo(x, y - 12);
+                    ctx.lineTo(x - 6, y - 4);
+                    ctx.lineTo(x + 6, y - 4);
+                } else {
+                    ctx.moveTo(x, y + 12);
+                    ctx.lineTo(x - 6, y + 4);
+                    ctx.lineTo(x + 6, y + 4);
+                }
+                ctx.closePath();
+                ctx.fill();
+            });
+
+            // Цена
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText(max.toFixed(2), pad.left + chartW, pad.top + 14);
+            ctx.fillText(min.toFixed(2), pad.left + chartW, pad.top + chartH + 14);
         }
 
         // ---------- MOEX API ----------
@@ -216,12 +250,12 @@
                 const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
                 const now = new Date();
                 const from = new Date(now);
-                from.setMinutes(from.getMinutes() - 30);
+                from.setMinutes(from.getMinutes() - 60);
                 
                 const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
                 const params = new URLSearchParams({
-                    from: from.toISOString().split('T')[0] + 'T' + from.toISOString().split('T')[1].slice(0,5),
-                    till: now.toISOString().split('T')[0] + 'T' + now.toISOString().split('T')[1].slice(0,5),
+                    from: from.toISOString().slice(0,16),
+                    till: now.toISOString().slice(0,16),
                     interval: 1,
                 });
                 
@@ -271,7 +305,7 @@
                 if (profit > 0) STATE.stats.wins++; else STATE.stats.losses++;
                 STATE.stats.profit += profit;
                 render();
-                updateChart(STATE.chartData, STATE.trades);
+                updateChart();
             }
         }
 
@@ -350,6 +384,14 @@
             }
         }
 
+        // ---------- ОБНОВЛЕНИЕ ГРАФИКА ----------
+        function updateChart() {
+            const canvas = document.getElementById('chartCanvas');
+            if (canvas) {
+                drawChart(canvas, STATE.chartData, STATE.trades);
+            }
+        }
+
         // ---------- УПРАВЛЕНИЕ ----------
         window.toggleStrategy = function(instrument) {
             STATE.strategies[instrument] = !STATE.strategies[instrument];
@@ -367,9 +409,7 @@
                 const candles = await fetchCandles('RTS');
                 if (candles.length > 0) {
                     STATE.chartData = candles;
-                    if (candlestickSeries) {
-                        updateChart(candles, STATE.trades);
-                    }
+                    updateChart();
                 }
                 
                 runStrategies();
@@ -383,14 +423,10 @@
 
         // ---------- ИНИЦИАЛИЗАЦИЯ ----------
         document.addEventListener('DOMContentLoaded', () => {
-            // Ждём загрузки библиотеки
-            const checkLibrary = setInterval(() => {
-                if (typeof LightweightCharts !== 'undefined') {
-                    clearInterval(checkLibrary);
-                    initChart();
-                    updateAll();
-                }
-            }, 200);
+            updateAll();
+            
+            // Обновление графика при ресайзе
+            window.addEventListener('resize', updateChart);
         });
     </script>
 </body>
