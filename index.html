@@ -183,7 +183,6 @@
                 
                 rows.forEach(row => {
                     const board = row[boardIdx];
-                    // Только основная доска RFUD
                     if (board !== 'RFUD') return;
                     
                     const secid = row[secIdx];
@@ -197,7 +196,6 @@
                     }
                 });
                 
-                // Сортировка: БЛИЖАЙШИЙ месяц ПЕРВЫЙ
                 const sortByDate = (arr) => {
                     return arr.sort((a, b) => {
                         const dateA = a.name.match(/\d{2}\.\d{2}/)?.[0] || '99.99';
@@ -218,7 +216,6 @@
                     console.log(`✅ Найден Si (ближайший): ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
                 }
                 
-                // Если не нашли — запасные коды
                 if (!INSTRUMENT_CODES.RTS) {
                     INSTRUMENT_CODES.RTS = 'RIU6';
                     console.warn('⚠️ RTS не найден, используем запасной:', INSTRUMENT_CODES.RTS);
@@ -492,7 +489,6 @@
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
             
-            // ТОЛЬКО СДЕЛКИ ПО ТЕКУЩЕМУ ИНСТРУМЕНТУ
             STATE.trades.forEach(t => {
                 if (t.instrument !== inst) return;
                 
@@ -604,6 +600,12 @@
                     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     STATE.interval = parseInt(btn.dataset.interval);
+                    
+                    // ✅ СБРАСЫВАЕМ ЗУМЫ ПРИ ПЕРЕКЛЮЧЕНИИ ТАЙМФРЕЙМА
+                    STATE.zoomLevel = 1;
+                    STATE.verticalZoom = 1;
+                    STATE.offset = 0;
+                    
                     loadCandles(STATE.currentInstrument || 'RTS');
                 });
             });
@@ -688,7 +690,6 @@
             if (STATE.strategies.RTS && rts.price > 0) {
                 const pos = STATE.positions.RTS;
                 if (!pos) {
-                    // Импульсный пробой (упрощённо)
                     const high = STATE.candles.RTS?.slice(-20).reduce((a,b) => a.high > b.high ? a : b)?.high || rts.price;
                     const low = STATE.candles.RTS?.slice(-20).reduce((a,b) => a.low < b.low ? a : b)?.low || rts.price;
                     if (rts.price > high) {
@@ -707,7 +708,6 @@
             if (STATE.strategies.Si && si.price > 0) {
                 const pos = STATE.positions.Si;
                 if (!pos) {
-                    // Отскок от уровней (упрощённо)
                     const avg = STATE.candles.Si?.slice(-20).reduce((a,b) => a + b.close, 0) / (STATE.candles.Si?.slice(-20).length || 1) || si.price;
                     if (si.price < avg * 0.995) {
                         executeTrade('Si', 'buy', si.price);
