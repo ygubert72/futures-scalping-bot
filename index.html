@@ -295,10 +295,10 @@
                 let daysBack = 1;
                 switch(interval) {
                     case 1: daysBack = 1; break;
-                    case 5: daysBack = 3; break;
-                    case 15: daysBack = 7; break;
-                    case 60: daysBack = 14; break;
-                    case 240: daysBack = 30; break;
+                    case 5: daysBack = 7; break;
+                    case 15: daysBack = 14; break;
+                    case 60: daysBack = 30; break;
+                    case 240: daysBack = 60; break;
                     default: daysBack = 1;
                 }
                 from.setDate(from.getDate() - daysBack);
@@ -317,7 +317,7 @@
                 
                 if (candles.length === 0) return null;
                 
-                const maxCandles = Math.min(candles.length, 300);
+                const maxCandles = Math.min(candles.length, 500);
                 return candles.slice(-maxCandles).map(row => ({
                     time: new Date(row[cols.indexOf('begin')]).getTime(),
                     open: row[cols.indexOf('open')],
@@ -432,6 +432,7 @@
                 return;
             }
             
+            // ---------- АДАПТИВНОЕ МАСШТАБИРОВАНИЕ ----------
             let min = Infinity, max = -Infinity;
             visible.forEach(c => {
                 if (c.low < min) min = c.low;
@@ -439,14 +440,27 @@
             });
             const range = max - min || 1;
             
-            const verticalZoom = STATE.verticalZoom || 1;
-            const zoomedRange = range / verticalZoom;
+            // ✅ РАСШИРЯЕМ ДИАПАЗОН, ЕСЛИ ОН СЛИШКОМ МАЛ
+            // Адаптивно: 5% от диапазона, но не меньше 2 пунктов для RTS и 0.05 для Si
+            const minRange = inst === 'RTS' ? 2 : 0.05;
+            const finalRange = Math.max(range, minRange);
             const center = (max + min) / 2;
-            min = center - zoomedRange / 2;
-            max = center + zoomedRange / 2;
+            const halfRange = finalRange * 0.55; // небольшой запас сверху/снизу
+            
+            min = center - halfRange;
+            max = center + halfRange;
+            
+            // Применяем вертикальный зум
+            const verticalZoom = STATE.verticalZoom || 1;
+            const zoomedRange = (max - min) / verticalZoom;
+            const zoomCenter = (max + min) / 2;
+            min = zoomCenter - zoomedRange / 2;
+            max = zoomCenter + zoomedRange / 2;
+            
             const padding = (max - min) * 0.05;
             min -= padding;
             max += padding;
+            // ------------------------------------------------
             
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 0.5;
@@ -601,7 +615,6 @@
                     btn.classList.add('active');
                     STATE.interval = parseInt(btn.dataset.interval);
                     
-                    // ✅ СБРАСЫВАЕМ ЗУМЫ ПРИ ПЕРЕКЛЮЧЕНИИ ТАЙМФРЕЙМА
                     STATE.zoomLevel = 1;
                     STATE.verticalZoom = 1;
                     STATE.offset = 0;
