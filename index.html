@@ -83,7 +83,6 @@
             </div>
             
             <div class="grid">
-                <!-- График -->
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;flex-wrap:wrap;gap:4px;">
                         <div class="card-title" id="chartTitle">📈 ГРАФИК RTS</div>
@@ -122,7 +121,6 @@
                     </div>
                 </div>
                 
-                <!-- Правая панель -->
                 <div class="right-panel">
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">⚡ УПРАВЛЕНИЕ</div>
@@ -164,7 +162,7 @@
 
     <script>
         // ============================================================
-        //  АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ (БЛИЖАЙШИЙ КОНТРАКТ)
+        //  АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ
         // ============================================================
         const INSTRUMENT_CODES = { RTS: null, Si: null };
 
@@ -209,11 +207,11 @@
                 
                 if (sortedRTS.length > 0) {
                     INSTRUMENT_CODES.RTS = sortedRTS[0].secid;
-                    console.log(`✅ Найден RTS (ближайший): ${sortedRTS[0].name} (${INSTRUMENT_CODES.RTS})`);
+                    console.log(`✅ Найден RTS: ${sortedRTS[0].name} (${INSTRUMENT_CODES.RTS})`);
                 }
                 if (sortedSi.length > 0) {
                     INSTRUMENT_CODES.Si = sortedSi[0].secid;
-                    console.log(`✅ Найден Si (ближайший): ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
+                    console.log(`✅ Найден Si: ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
                 }
                 
                 if (!INSTRUMENT_CODES.RTS) {
@@ -257,18 +255,23 @@
         };
 
         // ============================================================
-        //  ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ
+        //  ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ (С ЗАЩИТОЙ ОТ ОТРИЦАТЕЛЬНЫХ ЦЕН)
         // ============================================================
         function generateTestCandles(count, startPrice, stepMinutes = 1) {
             const now = Date.now();
             const candles = [];
             let price = startPrice;
+            const volMultiplier = Math.sqrt(stepMinutes / 5);
             for (let i = 0; i < count; i++) {
-                const change = (Math.random() - 0.5) * 300 * Math.sqrt(stepMinutes / 5);
+                const change = (Math.random() - 0.5) * 300 * volMultiplier * 2;
                 const open = price;
-                const close = price + change;
-                const high = Math.max(open, close) + Math.random() * 80 * Math.sqrt(stepMinutes / 5);
-                const low = Math.min(open, close) - Math.random() * 80 * Math.sqrt(stepMinutes / 5);
+                let close = price + change;
+                // 🛡️ ЗАЩИТА ОТ ОТРИЦАТЕЛЬНЫХ ЦЕН
+                if (close < startPrice * 0.1) {
+                    close = startPrice * 0.1 + Math.random() * 100;
+                }
+                const high = Math.max(open, close) + Math.random() * 80 * volMultiplier * 2;
+                const low = Math.min(open, close) - Math.random() * 80 * volMultiplier * 2;
                 candles.push({
                     time: now - (count - i) * stepMinutes * 60000,
                     open: Math.round(open * 100) / 100,
@@ -432,25 +435,22 @@
                 return;
             }
             
-            // ---------- АДАПТИВНОЕ МАСШТАБИРОВАНИЕ ----------
             let min = Infinity, max = -Infinity;
             visible.forEach(c => {
                 if (c.low < min) min = c.low;
                 if (c.high > max) max = c.high;
             });
-            const range = max - min || 1;
             
-            // ✅ РАСШИРЯЕМ ДИАПАЗОН, ЕСЛИ ОН СЛИШКОМ МАЛ
-            // Адаптивно: 5% от диапазона, но не меньше 2 пунктов для RTS и 0.05 для Si
+            // 🔧 АДАПТИВНЫЙ ДИАПАЗОН
+            const range = max - min || 1;
             const minRange = inst === 'RTS' ? 2 : 0.05;
             const finalRange = Math.max(range, minRange);
             const center = (max + min) / 2;
-            const halfRange = finalRange * 0.55; // небольшой запас сверху/снизу
+            const halfRange = finalRange * 0.55;
             
             min = center - halfRange;
             max = center + halfRange;
             
-            // Применяем вертикальный зум
             const verticalZoom = STATE.verticalZoom || 1;
             const zoomedRange = (max - min) / verticalZoom;
             const zoomCenter = (max + min) / 2;
@@ -460,7 +460,6 @@
             const padding = (max - min) * 0.05;
             min -= padding;
             max += padding;
-            // ------------------------------------------------
             
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 0.5;
@@ -503,6 +502,7 @@
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
             
+            // СДЕЛКИ ТОЛЬКО ПО ТЕКУЩЕМУ ИНСТРУМЕНТУ
             STATE.trades.forEach(t => {
                 if (t.instrument !== inst) return;
                 
@@ -938,7 +938,7 @@
             STATE.visibleCount = 60;
             STATE.zoomLevel = 1;
             
-            console.log('🔍 Определение актуальных фьючерсов (ближайшие контракты)...');
+            console.log('🔍 Определение актуальных фьючерсов...');
             await detectInstrumentCodes();
             
             console.log('📊 Используемые коды:', INSTRUMENT_CODES);
