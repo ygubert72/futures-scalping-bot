@@ -296,7 +296,7 @@
                 
                 const now = new Date();
                 const from = new Date(now);
-                from.setDate(from.getDate() - 14); // 2 недели 1м данных
+                from.setDate(from.getDate() - 30); // 30 дней
                 
                 const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
                 const params = new URLSearchParams({
@@ -373,7 +373,6 @@
                 STATE.minuteCandles[instrument] = candles;
                 console.log(`✅ Загружено 1м свечей (${instrument}):`, candles.length);
             } else {
-                // Тестовые данные, если MOEX не отвечает
                 const startPrice = instrument === 'RTS' ? 78000 : 88;
                 STATE.minuteCandles[instrument] = generateTestCandles(200, startPrice, 1);
                 console.log(`📊 Используются тестовые 1м свечи (${instrument})`);
@@ -397,7 +396,7 @@
         }
 
         // ============================================================
-        //  ТЕСТОВЫЕ ДАННЫЕ (ЕСЛИ MOEX НЕ ОТВЕЧАЕТ)
+        //  ТЕСТОВЫЕ ДАННЫЕ
         // ============================================================
         function generateTestCandles(count, startPrice, stepMinutes = 1) {
             const now = Date.now();
@@ -424,7 +423,7 @@
         }
 
         // ============================================================
-        //  ГРАФИК
+        //  ГРАФИК (С ИСПРАВЛЕННЫМ ЗУМОМ И ДРАГОМ)
         // ============================================================
         let chartState = {
             isDragging: false,
@@ -467,12 +466,21 @@
                 return;
             }
             
-            const totalVisible = Math.floor(STATE.visibleCount / STATE.zoomLevel);
-            let startIdx = Math.max(0, candles.length - totalVisible - STATE.offset);
-            let endIdx = Math.min(candles.length, startIdx + totalVisible);
+            // ✅ ПРАВИЛЬНЫЙ РАСЧЁТ visibleCount
+            let visibleCount = STATE.visibleCount;
+            if (STATE.zoomLevel > 1) {
+                visibleCount = Math.floor(STATE.visibleCount / STATE.zoomLevel);
+            } else {
+                visibleCount = Math.floor(STATE.visibleCount * STATE.zoomLevel);
+            }
+            visibleCount = Math.max(10, visibleCount);
+            
+            // ✅ ПРАВИЛЬНЫЙ РАСЧЁТ startIdx С УЧЁТОМ offset
+            let startIdx = Math.max(0, candles.length - visibleCount - STATE.offset);
+            let endIdx = Math.min(candles.length, startIdx + visibleCount);
             
             if (endIdx - startIdx < 2) {
-                startIdx = Math.max(0, candles.length - totalVisible);
+                startIdx = Math.max(0, candles.length - visibleCount);
                 endIdx = candles.length;
             }
             
@@ -646,9 +654,8 @@
             window.addEventListener('mousemove', (e) => {
                 if (!chartState.isDragging) return;
                 const dx = e.clientX - chartState.dragStartX;
-                const totalVisible = Math.floor(STATE.visibleCount / STATE.zoomLevel);
-                const dragCandles = Math.round(dx / 3);
-                STATE.offset = Math.max(0, chartState.dragStartOffset - dragCandles);
+                const dragOffset = Math.round(dx / 3);
+                STATE.offset = Math.max(0, chartState.dragStartOffset - dragOffset);
                 drawCandleChart();
             });
             
@@ -664,12 +671,10 @@
                     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     STATE.interval = parseInt(btn.dataset.interval);
-                    
                     STATE.zoomLevel = 1;
                     STATE.verticalZoom = 1;
                     STATE.offset = 0;
                     STATE.visibleCount = getOptimalCandleCount();
-                    
                     updateCandlesForInterval();
                     drawCandleChart();
                 });
@@ -690,7 +695,7 @@
         }
 
         // ============================================================
-        //  ТОРГОВЛЯ (ИСПОЛЬЗУЕТ 1М ДАННЫЕ)
+        //  ТОРГОВЛЯ
         // ============================================================
         function executeTrade(instrument, side, price) {
             const pos = STATE.positions[instrument];
@@ -931,7 +936,6 @@
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
                 
-                // Обновляем последнюю 1м свечу
                 const minuteCandles = STATE.minuteCandles[inst];
                 if (minuteCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
                     const last = minuteCandles[minuteCandles.length-1];
@@ -953,7 +957,6 @@
                         if (last.close > last.high) last.high = last.close;
                         if (last.close < last.low) last.low = last.close;
                     }
-                    // Обновляем агрегированные данные
                     updateCandlesForInterval();
                 }
                 
