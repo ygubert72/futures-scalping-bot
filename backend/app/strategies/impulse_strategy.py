@@ -3,6 +3,8 @@ from typing import Dict, Any, Optional
 from collections import deque
 
 from app.strategies.base_strategy import BaseStrategy
+from app.services.demo_account import DemoAccount
+from app.services.market_data import market_data
 
 logger = logging.getLogger(__name__)
 
@@ -14,28 +16,30 @@ class ImpulseStrategy(BaseStrategy):
     - Вход при пробое уровня с увеличением объёма
     - Тейк-профит: 100-150 пунктов
     - Стоп-лосс: 40-50 пунктов
-    - Фильтр: ATR для определения волатильности
     """
     
-    def __init__(self, instrument: str = "RTS"):
+    def __init__(self, instrument: str = "RTS", demo_account: DemoAccount = None):
         super().__init__(name="ImpulseStrategy", instrument=instrument)
+        self.demo_account = demo_account
         
         # Параметры стратегии
-        self.take_profit = 120  # пунктов
-        self.stop_loss = 45     # пунктов
-        self.volume_threshold = 1.5  # увеличение объёма в X раз
-        self.lookback_period = 20    # период для расчёта уровней
+        self.take_profit = 120
+        self.stop_loss = 45
+        self.volume_threshold = 1.5
+        self.lookback_period = 20
         
         # Хранилище данных
         self.prices = deque(maxlen=self.lookback_period)
         self.volumes = deque(maxlen=self.lookback_period)
         self.levels = {"high": None, "low": None}
         self.entry_price = None
+        self.position_open = False
         
     async def on_quote(self, quote_data: Dict[str, Any]):
-        """
-        Обработка новой котировки
-        """
+        """Обработка новой котировки"""
+        if not self.is_active:
+            return
+            
         price = quote_data.get("price")
         volume = quote_data.get("volume", 0)
         
@@ -54,15 +58,23 @@ class ImpulseStrategy(BaseStrategy):
         # Генерируем сигнал
         signal = await self.generate_signal(quote_data)
         if signal and await self.validate_signal(signal):
-            # Здесь будет отправка заявки через клиент
-            logger.info(f"[{self.name}] Сигнал: {signal}")
-            # В реальном коде здесь был бы вызов finam_client.place_order()
+            # Исполняем сделку на демо-счёте
+            side = signal["action"]
+            result = await self.demo_account.execute_order(
+                instrument=self.instrument,
+                side=side,
+                price=price,
+                quantity=1
+            )
             
+            if result:
+                self.position_open = True
+                self.entry_price = price
+                logger.info(f"[{self.name}] Сделка открыта: {side} по {price}")
+                
     async def generate_signal(self, market_data: Dict[str, Any]) -> Optional[Dict]:
-        """
-        Генерация торгового сигнала
-        """
-        if not self.is_active:
+        """Генерация торгового сигнала"""
+        if not self.is_active or self.position_open:
             return None
             
         price = market_data.get("price")
@@ -86,43 +98,41 @@ class ImpulseStrategy(BaseStrategy):
             return {
                 "action": "buy",
                 "price": price,
-                "reason": f"Пробой уровня {current_high} с объёмом {volume}",
-                "take_profit": price + self.take_profit,
-                "stop_loss": price - self.stop_loss
+                "reason": f"Пробой уровня {current_high} с объёмом {volume}"
             }
             
         elif price < current_low and volume_spike:
             return {
                 "action": "sell",
                 "price": price,
-                "reason": f"Пробой уровня {current_low} с объёмом {volume}",
-                "take_profit": price - self.take_profit,
-                "stop_loss": price + self.stop_loss
+                "reason": f"Пробой уровня {current_low} с объёмом {volume}"
             }
             
+        # Проверка тейк-профит и стоп-лосс для открытой позиции
+        if self.position_open and self.entry_price:
+            if price >= self.entry_price + self.take_profit:
+                # Закрываем позицию
+                await self._close_position(price, "take_profit")
+            elif price <= self.entry_price - self.stop_loss:
+                await self._close_position(price, "stop_loss")
+                
         return None
         
-    async def validate_signal(self, signal: Dict) -> bool:
-        """
-        Проверка валидности сигнала
-        """
-        # Проверяем, что у нас нет открытых позиций
-        if self.entry_price is not None:
-            return False
-            
-        # Проверяем, что цена не слишком далеко от текущей
-        if abs(signal["price"] - self.prices[-1]) > self.stop_loss * 2:
-            return False
-            
-        return True
+    async def _close_position(self, price: float, reason: str):
+        """Закрытие позиции"""
+        side = "sell"  # Всегда продаём для закрытия long
+        result = await self.demo_account.execute_order(
+            instrument=self.instrument,
+            side=side,
+            price=price,
+            quantity=1
+        )
         
-    async def on_trade_filled(self, trade_data: Dict[str, Any]):
-        """
-        Обработка исполненной сделки
-        """
-        await super().on_trade_filled(trade_data)
-        self.entry_price = trade_data.get("price")
-        
-        # Если сделка закрыта (есть close_price)
-        if trade_data.get("close_price"):
+        if result:
+            self.position_open = False
             self.entry_price = None
+            logger.info(f"[{self.name}] Позиция закрыта: {reason} по {price}")
+        
+    async def validate_signal(self, signal: Dict) -> bool:
+        """Проверка валидности сигнала"""
+        return True  # Упрощённо
