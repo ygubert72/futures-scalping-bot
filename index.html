@@ -470,22 +470,25 @@
 
         // ---------- УПРАВЛЕНИЕ ГРАФИКОМ ----------
         function setupChartControls() {
-            const canvas = document.getElementById('candleChart');
-            if (!canvas) return;
-            
-            canvas.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                
-                if (e.ctrlKey || e.metaKey) {
-                    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-                    STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
-                    drawCandleChart();
-                } else {
-                    const delta = e.deltaY > 0 ? -0.2 : 0.2;
-                    STATE.zoomLevel = Math.max(STATE.zoomMin || 0.1, Math.min(STATE.zoomMax || 25, STATE.zoomLevel + delta));
-                    drawCandleChart();
-                }
-            }, { passive: false });
+    const canvas = document.getElementById('candleChart');
+    if (!canvas) return;
+    
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        
+        if (e.ctrlKey || e.metaKey) {
+            const delta = e.deltaY > 0 ? -0.15 : 0.15;
+            STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
+            drawCandleChart();
+        } else {
+            const delta = e.deltaY > 0 ? -0.3 : 0.3;
+            STATE.zoomLevel = Math.max(STATE.zoomMin, Math.min(STATE.zoomMax, STATE.zoomLevel + delta));
+            drawCandleChart();
+        }
+    }, { passive: false });
+    
+    // ... остальной код без изменений ...
+}
             
             canvas.addEventListener('mousedown', (e) => {
                 chartState.isDragging = true;
