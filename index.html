@@ -6,282 +6,62 @@
     <title>Futures Scalping Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            height: 100vh;
-            overflow: hidden;
-        }
-        .container {
-            max-width: 1500px;
-            margin: 0 auto;
-            padding: 10px;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #1e293b;
-            flex-shrink: 0;
-        }
-        .header h1 {
-            font-size: 18px;
-            color: #f1f5f9;
-        }
-        .balance {
-            text-align: right;
-        }
-        .balance .label {
-            font-size: 10px;
-            color: #94a3b8;
-        }
-        .balance .amount {
-            font-size: 20px;
-            font-weight: bold;
-            color: #22c55e;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 10px;
-            flex: 1;
-            min-height: 0;
-            padding-top: 8px;
-        }
-        .card {
-            background: #1e293b;
-            border-radius: 10px;
-            padding: 10px;
-            border: 1px solid #334155;
-            display: flex;
-            flex-direction: column;
-        }
-        .card-title {
-            font-size: 10px;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            flex-shrink: 0;
-        }
-        #chart-container {
-            flex: 1;
-            min-height: 0;
-            position: relative;
-            overflow: hidden;
-        }
-        #candleChart {
-            width: 100%;
-            height: 100%;
-            display: block;
-            background: #0f172a;
-            border-radius: 6px;
-            cursor: grab;
-        }
-        #candleChart:active {
-            cursor: grabbing;
-        }
-        .chart-controls {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-            flex-shrink: 0;
-            padding: 4px 0;
-            align-items: center;
-        }
-        .chart-controls button {
-            background: #334155;
-            border: none;
-            color: #94a3b8;
-            padding: 2px 10px;
-            border-radius: 4px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .chart-controls button:hover {
-            background: #475569;
-            color: #e2e8f0;
-        }
-        .chart-controls button.active {
-            background: #22c55e;
-            color: white;
-        }
-        .chart-controls .sep {
-            color: #475569;
-            font-size: 11px;
-            margin: 0 2px;
-        }
-        .right-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            overflow: hidden;
-        }
-        .strategy-btn {
-            padding: 3px 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 12px;
-            color: white;
-            transition: all 0.2s;
-        }
-        .strategy-btn.active {
-            background: #22c55e;
-        }
-        .strategy-btn.active:hover {
-            background: #16a34a;
-        }
-        .strategy-btn.inactive {
-            background: #64748b;
-        }
-        .strategy-btn.inactive:hover {
-            background: #475569;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px;
-            flex-shrink: 0;
-        }
-        .stat-item {
-            background: #0f172a;
-            padding: 4px 8px;
-            border-radius: 4px;
-            text-align: center;
-        }
-        .stat-item .value {
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .stat-item .value.green {
-            color: #22c55e;
-        }
-        .stat-item .value.red {
-            color: #ef4444;
-        }
-        .stat-item .value.yellow {
-            color: #eab308;
-        }
-        .stat-item .label {
-            font-size: 9px;
-            color: #94a3b8;
-        }
-        .trades-table {
-            flex: 1;
-            overflow: hidden;
-        }
-        .trades-table .scroll {
-            height: 100%;
-            overflow-y: auto;
-        }
-        .trades-table table {
-            width: 100%;
-            font-size: 11px;
-            border-collapse: collapse;
-        }
-        .trades-table th {
-            text-align: left;
-            padding: 3px 3px;
-            color: #94a3b8;
-            font-weight: 500;
-            border-bottom: 1px solid #1e293b;
-            position: sticky;
-            top: 0;
-            background: #1e293b;
-        }
-        .trades-table td {
-            padding: 3px 3px;
-            border-bottom: 1px solid #1e293b;
-        }
-        .badge {
-            padding: 1px 5px;
-            border-radius: 3px;
-            font-size: 9px;
-        }
-        .badge.buy {
-            background: #166534;
-            color: #86efac;
-        }
-        .badge.sell {
-            background: #7f1d1d;
-            color: #fca5a5;
-        }
-        .profit-positive {
-            color: #22c55e;
-        }
-        .profit-negative {
-            color: #ef4444;
-        }
-        ::-webkit-scrollbar {
-            width: 3px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #1e293b;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #475569;
-            border-radius: 2px;
-        }
-        .zoom-info {
-            font-size: 10px;
-            color: #64748b;
-            text-align: right;
-            flex-shrink: 0;
-        }
-        .inst-btn {
-            background: #334155;
-            border: none;
-            color: #94a3b8;
-            padding: 2px 12px;
-            border-radius: 4px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .inst-btn.active {
-            background: #22c55e;
-            color: white;
-        }
-        .inst-btn:hover {
-            background: #475569;
-            color: #e2e8f0;
-        }
-        .price-display {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-left: auto;
-        }
-        .price-display .label {
-            font-size: 10px;
-            color: #64748b;
-        }
-        .price-display .price {
-            font-size: 14px;
-            font-weight: bold;
-            color: #22c55e;
-            font-family: monospace;
-        }
-        .price-display .change {
-            font-size: 11px;
-        }
-        .price-display .change.positive {
-            color: #22c55e;
-        }
-        .price-display .change.negative {
-            color: #ef4444;
-        }
+        /* ... все стили как в предыдущей версии ... */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; overflow: hidden; }
+        .container { max-width: 1500px; margin: 0 auto; padding: 10px; height: 100vh; display: flex; flex-direction: column; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid #1e293b; flex-shrink: 0; }
+        .header h1 { font-size: 18px; color: #f1f5f9; }
+        .balance { text-align: right; }
+        .balance .label { font-size: 10px; color: #94a3b8; }
+        .balance .amount { font-size: 20px; font-weight: bold; color: #22c55e; }
+        .grid { display: grid; grid-template-columns: 1fr 300px; gap: 10px; flex: 1; min-height: 0; padding-top: 8px; }
+        .card { background: #1e293b; border-radius: 10px; padding: 10px; border: 1px solid #334155; display: flex; flex-direction: column; }
+        .card-title { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+        #chart-container { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+        #candleChart { width: 100%; height: 100%; display: block; background: #0f172a; border-radius: 6px; cursor: grab; }
+        #candleChart:active { cursor: grabbing; }
+        .chart-controls { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding: 4px 0; align-items: center; }
+        .chart-controls button { background: #334155; border: none; color: #94a3b8; padding: 2px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+        .chart-controls button:hover { background: #475569; color: #e2e8f0; }
+        .chart-controls button.active { background: #22c55e; color: white; }
+        .chart-controls .sep { color: #475569; font-size: 11px; margin: 0 2px; }
+        .right-panel { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+        .strategy-btn { padding: 3px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; color: white; transition: all 0.2s; }
+        .strategy-btn.active { background: #22c55e; }
+        .strategy-btn.active:hover { background: #16a34a; }
+        .strategy-btn.inactive { background: #64748b; }
+        .strategy-btn.inactive:hover { background: #475569; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; flex-shrink: 0; }
+        .stat-item { background: #0f172a; padding: 4px 8px; border-radius: 4px; text-align: center; }
+        .stat-item .value { font-size: 14px; font-weight: bold; }
+        .stat-item .value.green { color: #22c55e; }
+        .stat-item .value.red { color: #ef4444; }
+        .stat-item .value.yellow { color: #eab308; }
+        .stat-item .label { font-size: 9px; color: #94a3b8; }
+        .trades-table { flex: 1; overflow: hidden; }
+        .trades-table .scroll { height: 100%; overflow-y: auto; }
+        .trades-table table { width: 100%; font-size: 11px; border-collapse: collapse; }
+        .trades-table th { text-align: left; padding: 3px 3px; color: #94a3b8; font-weight: 500; border-bottom: 1px solid #1e293b; position: sticky; top: 0; background: #1e293b; }
+        .trades-table td { padding: 3px 3px; border-bottom: 1px solid #1e293b; }
+        .badge { padding: 1px 5px; border-radius: 3px; font-size: 9px; }
+        .badge.buy { background: #166534; color: #86efac; }
+        .badge.sell { background: #7f1d1d; color: #fca5a5; }
+        .profit-positive { color: #22c55e; }
+        .profit-negative { color: #ef4444; }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+        .zoom-info { font-size: 10px; color: #64748b; text-align: right; flex-shrink: 0; }
+        .inst-btn { background: #334155; border: none; color: #94a3b8; padding: 2px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+        .inst-btn.active { background: #22c55e; color: white; }
+        .inst-btn:hover { background: #475569; color: #e2e8f0; }
+        .price-display { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+        .price-display .label { font-size: 10px; color: #64748b; }
+        .price-display .price { font-size: 14px; font-weight: bold; color: #22c55e; font-family: monospace; }
+        .price-display .change { font-size: 11px; }
+        .price-display .change.positive { color: #22c55e; }
+        .price-display .change.negative { color: #ef4444; }
     </style>
 </head>
 <body>
@@ -301,7 +81,7 @@
                     <div class="amount" id="balanceDisplay">100 000 ₽</div>
                 </div>
             </div>
-
+            
             <!-- Основная сетка -->
             <div class="grid">
                 <!-- График -->
@@ -334,7 +114,7 @@
                     </div>
                     <div style="display:flex;justify-content:space-between;flex-shrink:0;padding-top:4px;">
                         <div style="font-size:10px;color:#64748b;">
-                            <span id="candleCount">0</span> свечей ·
+                            <span id="candleCount">0</span> свечей · 
                             <span id="timeframeLabel">1м</span>
                         </div>
                         <div class="zoom-info">
@@ -342,7 +122,7 @@
                         </div>
                     </div>
                 </div>
-
+                
                 <!-- Правая панель -->
                 <div class="right-panel">
                     <div class="card" style="flex-shrink:0;">
@@ -353,7 +133,7 @@
                         </div>
                         <div id="strategyStatus" style="font-size:11px;color:#94a3b8;">⏸ Остановлены</div>
                     </div>
-
+                    
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">📊 СТАТИСТИКА</div>
                         <div class="stats-grid">
@@ -363,7 +143,7 @@
                             <div class="stat-item"><div class="value yellow" id="drawdown">0%</div><div class="label">Просадка</div></div>
                         </div>
                     </div>
-
+                    
                     <div class="card" style="flex:1;min-height:0;">
                         <div class="card-title">📋 СДЕЛКИ</div>
                         <div class="trades-table">
@@ -384,10 +164,9 @@
 
     <script>
         // ============================================================
-        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК + ЖИВЫЕ КОТИРОВКИ
+        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК С МАСШТАБИРОВАНИЕМ
         // ============================================================
-
-        // ---------- СОСТОЯНИЕ ----------
+        
         const STATE = {
             balance: 100000,
             trades: [],
@@ -407,7 +186,6 @@
             currentInstrument: 'RTS',
         };
 
-        // ---------- ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ ----------
         function generateTestCandles(count, startPrice = 124500) {
             const now = Date.now();
             const candles = [];
@@ -431,51 +209,37 @@
             return candles;
         }
 
-        // ---------- ЗАГРУЗКА С MOEX ----------
         async function fetchCandlesFromMOEX(instrument, interval = 1) {
             try {
                 const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
                 const now = new Date();
                 const from = new Date(now);
-
-                // Период в зависимости от интервала
+                
                 let daysBack = 1;
-                switch (interval) {
-                    case 1:
-                        daysBack = 1;
-                        break;
-                    case 5:
-                        daysBack = 3;
-                        break;
-                    case 15:
-                        daysBack = 7;
-                        break;
-                    case 60:
-                        daysBack = 14;
-                        break;
-                    case 240:
-                        daysBack = 30;
-                        break;
-                    default:
-                        daysBack = 1;
+                switch(interval) {
+                    case 1: daysBack = 1; break;
+                    case 5: daysBack = 3; break;
+                    case 15: daysBack = 7; break;
+                    case 60: daysBack = 14; break;
+                    case 240: daysBack = 30; break;
+                    default: daysBack = 1;
                 }
                 from.setDate(from.getDate() - daysBack);
-
-                const url =
-                    `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
+                
+                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
                 const params = new URLSearchParams({
-                    from: from.toISOString().slice(0, 16),
-                    till: now.toISOString().slice(0, 16),
+                    from: from.toISOString().slice(0,16),
+                    till: now.toISOString().slice(0,16),
                     interval: interval,
                 });
-
+                
                 const resp = await fetch(`${url}?${params}`);
                 const data = await resp.json();
                 const candles = data.candles?.data || [];
                 const cols = data.candles?.columns || [];
-
+                
                 if (candles.length === 0) return null;
-
+                
                 const maxCandles = Math.min(candles.length, 300);
                 return candles.slice(-maxCandles).map(row => ({
                     time: new Date(row[cols.indexOf('begin')]).getTime(),
@@ -493,8 +257,7 @@
         async function fetchQuote(instrument) {
             try {
                 const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
-                const url =
-                    `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
+                const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
                 const resp = await fetch(url);
                 const data = await resp.json();
                 const row = data.marketdata?.data?.[0];
@@ -508,20 +271,18 @@
             }
         }
 
-        // ---------- ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТОВ ----------
         window.switchInstrument = async function(instrument) {
             STATE.currentInstrument = instrument;
             STATE.zoomLevel = 1;
             STATE.offset = 0;
-
+            
             document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
             document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
             document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
-
+            
             await loadData(instrument);
         };
 
-        // ---------- ГРАФИК ----------
         let chartState = {
             isDragging: false,
             dragStartX: 0,
@@ -531,65 +292,64 @@
         function drawCandleChart() {
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
-
+            
             const container = canvas.parentElement;
             const rect = container.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
-
+            
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
             canvas.style.width = rect.width + 'px';
             canvas.style.height = rect.height + 'px';
-
+            
             const ctx = canvas.getContext('2d');
             ctx.scale(dpr, dpr);
-
+            
             const W = rect.width;
             const H = rect.height;
             const pad = { top: 20, bottom: 25, left: 55, right: 20 };
             const chartW = W - pad.left - pad.right;
             const chartH = H - pad.top - pad.bottom;
-
+            
             ctx.fillStyle = '#0f172a';
             ctx.fillRect(0, 0, W, H);
-
+            
             let candles = STATE.allCandles;
             if (candles.length === 0) {
                 ctx.fillStyle = '#475569';
                 ctx.font = '14px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('Загрузка данных...', W / 2, H / 2);
+                ctx.fillText('Загрузка данных...', W/2, H/2);
                 return;
             }
-
+            
             const totalVisible = Math.floor(STATE.visibleCount / STATE.zoomLevel);
             let startIdx = Math.max(0, candles.length - totalVisible - STATE.offset);
             let endIdx = Math.min(candles.length, startIdx + totalVisible);
-
+            
             if (endIdx - startIdx < 2) {
                 startIdx = Math.max(0, candles.length - totalVisible);
                 endIdx = candles.length;
             }
-
+            
             const visible = candles.slice(startIdx, endIdx);
             STATE.visibleCandles = visible;
-
+            
             if (visible.length < 2) {
                 ctx.fillStyle = '#475569';
                 ctx.font = '14px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('Недостаточно данных', W / 2, H / 2);
+                ctx.fillText('Недостаточно данных', W/2, H/2);
                 return;
             }
-
-            let min = Infinity,
-                max = -Infinity;
+            
+            let min = Infinity, max = -Infinity;
             visible.forEach(c => {
                 if (c.low < min) min = c.low;
                 if (c.high > max) max = c.high;
             });
             const range = max - min || 1;
-
+            
             const verticalZoom = STATE.verticalZoom || 1;
             const zoomedRange = range / verticalZoom;
             const center = (max + min) / 2;
@@ -598,7 +358,7 @@
             const padding = (max - min) * 0.05;
             min -= padding;
             max += padding;
-
+            
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 0.5;
             for (let i = 0; i <= 4; i++) {
@@ -607,44 +367,44 @@
                 ctx.moveTo(pad.left, y);
                 ctx.lineTo(W - pad.right, y);
                 ctx.stroke();
-
+                
                 const price = max - (i / 4) * (max - min);
                 ctx.fillStyle = '#64748b';
                 ctx.font = '10px monospace';
                 ctx.textAlign = 'right';
                 ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
             }
-
+            
             const candleWidth = Math.max(2, Math.min((chartW / visible.length) * 0.7, 20));
             const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
-
+            
             visible.forEach((c, i) => {
-                const x = pad.left + (i / visible.length) * chartW + gap / 2;
+                const x = pad.left + (i / visible.length) * chartW + gap/2;
                 const yHigh = pad.top + chartH - ((c.high - min) / (max - min)) * chartH;
                 const yLow = pad.top + chartH - ((c.low - min) / (max - min)) * chartH;
                 const yOpen = pad.top + chartH - ((c.open - min) / (max - min)) * chartH;
                 const yClose = pad.top + chartH - ((c.close - min) / (max - min)) * chartH;
-
+                
                 const isGreen = c.close >= c.open;
                 ctx.fillStyle = isGreen ? '#22c55e' : '#ef4444';
                 ctx.strokeStyle = isGreen ? '#22c55e' : '#ef4444';
                 ctx.lineWidth = 1;
-
+                
                 ctx.beginPath();
-                ctx.moveTo(x + candleWidth / 2, yHigh);
-                ctx.lineTo(x + candleWidth / 2, yLow);
+                ctx.moveTo(x + candleWidth/2, yHigh);
+                ctx.lineTo(x + candleWidth/2, yLow);
                 ctx.stroke();
-
+                
                 const bodyY = Math.min(yOpen, yClose);
                 const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
-
+            
             STATE.trades.forEach(t => {
                 const tTime = new Date(t.timestamp).getTime();
                 let candleIdx = -1;
                 let minDiff = Infinity;
-
+                
                 visible.forEach((c, i) => {
                     const diff = Math.abs(c.time - tTime);
                     if (diff < minDiff) {
@@ -652,13 +412,13 @@
                         candleIdx = i;
                     }
                 });
-
+                
                 if (candleIdx === -1 || minDiff > 60000) return;
-
+                
                 const c = visible[candleIdx];
-                const x = pad.left + (candleIdx / visible.length) * chartW + candleWidth / 2;
+                const x = pad.left + (candleIdx / visible.length) * chartW + candleWidth/2;
                 const y = pad.top + chartH - ((c.close - min) / (max - min)) * chartH;
-
+                
                 ctx.fillStyle = t.side === 'buy' ? '#22c55e' : '#ef4444';
                 ctx.beginPath();
                 if (t.side === 'buy') {
@@ -673,63 +433,60 @@
                 ctx.closePath();
                 ctx.fill();
             });
-
+            
             if (visible.length > 0) {
-                const last = visible[visible.length - 1];
+                const last = visible[visible.length-1];
                 const lastY = pad.top + chartH - ((last.close - min) / (max - min)) * chartH;
                 ctx.fillStyle = '#22c55e';
                 ctx.font = '11px monospace';
                 ctx.textAlign = 'left';
                 ctx.fillText(last.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
             }
-
+            
             ctx.fillStyle = '#64748b';
             ctx.font = '9px sans-serif';
             ctx.textAlign = 'center';
-
+            
             const step = Math.max(1, Math.floor(visible.length / 8));
             for (let i = 0; i < visible.length; i += step) {
-                const x = pad.left + (i / visible.length) * chartW + candleWidth / 2;
+                const x = pad.left + (i / visible.length) * chartW + candleWidth/2;
                 const t = new Date(visible[i].time);
                 const label = t.getHours() + ':' + String(t.getMinutes()).padStart(2, '0');
                 ctx.fillText(label, x, H - 5);
             }
-
+            
             document.getElementById('candleCount').textContent = visible.length;
-            document.getElementById('timeframeLabel').textContent =
-                STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval / 60) + 'ч';
+            document.getElementById('timeframeLabel').textContent = 
+                STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
         }
 
-        // ---------- УПРАВЛЕНИЕ ГРАФИКОМ ----------
         function setupChartControls() {
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
-
-            // --- ГОРИЗОНТАЛЬНЫЙ И ВЕРТИКАЛЬНЫЙ ЗУМ (КОЛЁСИКО) ---
+            
+            // === ГОРИЗОНТАЛЬНЫЙ ЗУМ (колёсико) ===
             canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
-
+                
                 if (e.ctrlKey || e.metaKey) {
-                    // ВЕРТИКАЛЬНЫЙ ЗУМ
-                    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
                     STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
                     drawCandleChart();
                 } else {
-                    // ГОРИЗОНТАЛЬНЫЙ ЗУМ
-                    const delta = e.deltaY > 0 ? -0.2 : 0.2;
+                    const delta = e.deltaY > 0 ? -0.15 : 0.15;
                     STATE.zoomLevel = Math.max(STATE.zoomMin, Math.min(STATE.zoomMax, STATE.zoomLevel + delta));
                     drawCandleChart();
                 }
             }, { passive: false });
-
-            // --- ДРАГ ДЛЯ СДВИГА ---
+            
+            // === ДРАГ ===
             canvas.addEventListener('mousedown', (e) => {
                 chartState.isDragging = true;
                 chartState.dragStartX = e.clientX;
                 chartState.dragStartOffset = STATE.offset;
                 canvas.style.cursor = 'grabbing';
             });
-
+            
             window.addEventListener('mousemove', (e) => {
                 if (!chartState.isDragging) return;
                 const dx = e.clientX - chartState.dragStartX;
@@ -738,28 +495,26 @@
                 STATE.offset = Math.max(0, chartState.dragStartOffset - dragCandles);
                 drawCandleChart();
             });
-
+            
             window.addEventListener('mouseup', () => {
                 if (chartState.isDragging) {
                     chartState.isDragging = false;
                     canvas.style.cursor = 'grab';
                 }
             });
-
-            // --- ТАЙМФРЕЙМЫ ---
+            
+            // === ТАЙМФРЕЙМЫ (НЕ СБРАСЫВАЕМ ЗУМ!) ===
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b
-                        .classList.remove('active'));
+                    document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     STATE.interval = parseInt(btn.dataset.interval);
-                    STATE.zoomLevel = 1;
-                    STATE.offset = 0;
+                    // НЕ сбрасываем zoomLevel и offset!
                     loadData(STATE.currentInstrument || 'RTS');
                 });
             });
-
-            // --- ВЕРТИКАЛЬНЫЙ ЗУМ (КНОПКИ) ---
+            
+            // === ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) ===
             document.getElementById('zoomInV').addEventListener('click', () => {
                 STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
                 drawCandleChart();
@@ -774,7 +529,6 @@
             });
         }
 
-        // ---------- ЗАГРУЗКА ДАННЫХ ----------
         async function loadData(instrument = 'RTS') {
             const interval = STATE.interval;
             const candles = await fetchCandlesFromMOEX(instrument, interval);
@@ -798,7 +552,7 @@
         // ---------- ТОРГОВЛЯ ----------
         function executeTrade(instrument, side, price) {
             const pos = STATE.positions[instrument];
-
+            
             if (side === 'buy') {
                 if (pos) return;
                 STATE.positions[instrument] = { side: 'buy', entry: price };
@@ -821,8 +575,7 @@
                 STATE.trades.push(trade);
                 STATE.positions[instrument] = null;
                 STATE.stats.total++;
-                if (profit > 0) STATE.stats.wins++;
-                else STATE.stats.losses++;
+                if (profit > 0) STATE.stats.wins++; else STATE.stats.losses++;
                 STATE.stats.profit += profit;
                 render();
             }
@@ -861,17 +614,14 @@
             }
         }
 
-        // ---------- ОТРИСОВКА ----------
         function render() {
             const s = STATE.stats;
             const winRate = s.total ? Math.round((s.wins / s.total) * 100) : 0;
             const profit = Math.round(s.profit * 100) / 100;
 
             document.getElementById('balanceDisplay').textContent = Math.round(STATE.balance) + ' ₽';
-            document.getElementById('rtsQuote').textContent =
-                `RTS: ${STATE.quotes.RTS.price ? STATE.quotes.RTS.price.toFixed(2) : '--'}`;
-            document.getElementById('siQuote').textContent =
-                `Si: ${STATE.quotes.Si.price ? STATE.quotes.Si.price.toFixed(2) : '--'}`;
+            document.getElementById('rtsQuote').textContent = `RTS: ${STATE.quotes.RTS.price ? STATE.quotes.RTS.price.toFixed(2) : '--'}`;
+            document.getElementById('siQuote').textContent = `Si: ${STATE.quotes.Si.price ? STATE.quotes.Si.price.toFixed(2) : '--'}`;
 
             document.getElementById('totalTrades').textContent = s.total;
             document.getElementById('winRate').textContent = winRate + '%';
@@ -884,26 +634,25 @@
             rtsBtn.className = 'strategy-btn ' + (STATE.strategies.RTS ? 'active' : 'inactive');
             siBtn.textContent = (STATE.strategies.Si ? '⏹' : '▶') + ' Si';
             siBtn.className = 'strategy-btn ' + (STATE.strategies.Si ? 'active' : 'inactive');
-            document.getElementById('strategyStatus').textContent =
+            document.getElementById('strategyStatus').textContent = 
                 (STATE.strategies.RTS || STATE.strategies.Si) ? '🟢 Активны' : '⏸ Остановлены';
 
             const tbody = document.getElementById('tradesBody');
             const trades = STATE.trades.slice(-15).reverse();
             if (trades.length === 0) {
-                tbody.innerHTML =
-                    '<tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок</td></tr>';
             } else {
                 tbody.innerHTML = trades.map(t => `
-                        <tr>
-                            <td>${t.timeStr}</td>
-                            <td>${t.instrument}</td>
-                            <td><span class="badge ${t.side === 'buy' ? 'buy' : 'sell'}">${t.side === 'buy' ? 'Покуп' : 'Продаж'}</span></td>
-                            <td>${t.price.toFixed(2)}</td>
-                            <td style="text-align:right;font-weight:bold;" class="${t.profit >= 0 ? 'profit-positive' : 'profit-negative'}">${t.profit >= 0 ? '+' : ''}${t.profit}</td>
-                        </tr>
-                    `).join('');
+                    <tr>
+                        <td>${t.timeStr}</td>
+                        <td>${t.instrument}</td>
+                        <td><span class="badge ${t.side === 'buy' ? 'buy' : 'sell'}">${t.side === 'buy' ? 'Покуп' : 'Продаж'}</span></td>
+                        <td>${t.price.toFixed(2)}</td>
+                        <td style="text-align:right;font-weight:bold;" class="${t.profit >= 0 ? 'profit-positive' : 'profit-negative'}">${t.profit >= 0 ? '+' : ''}${t.profit}</td>
+                    </tr>
+                `).join('');
             }
-
+            
             const inst = STATE.currentInstrument || 'RTS';
             const quote = STATE.quotes[inst];
             if (quote && quote.price > 0) {
@@ -917,29 +666,27 @@
                 document.getElementById('priceChange').textContent = '--';
                 document.getElementById('priceChange').className = 'change';
             }
-
+            
             drawCandleChart();
         }
 
-        // ---------- УПРАВЛЕНИЕ ----------
         window.toggleStrategy = function(instrument) {
             STATE.strategies[instrument] = !STATE.strategies[instrument];
             render();
         };
 
-        // ---------- ЦИКЛ ОБНОВЛЕНИЯ ----------
         async function updateAll() {
             try {
                 const inst = STATE.currentInstrument || 'RTS';
-
+                
                 const rts = await fetchQuote('RTS');
                 if (rts && rts.price > 0) STATE.quotes.RTS = rts;
-
+                
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
-
+                
                 if (STATE.allCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
-                    const last = STATE.allCandles[STATE.allCandles.length - 1];
+                    const last = STATE.allCandles[STATE.allCandles.length-1];
                     const now = Date.now();
                     if (last && now - last.time > 120000) {
                         const newCandle = {
@@ -959,32 +706,31 @@
                         if (last.close < last.low) last.low = last.close;
                     }
                 }
-
+                
                 runStrategies();
                 render();
             } catch (e) {
                 console.error('Ошибка обновления:', e);
             }
-
+            
             setTimeout(updateAll, 2000);
         }
 
-        // ---------- ИНИЦИАЛИЗАЦИЯ ----------
         document.addEventListener('DOMContentLoaded', async () => {
             STATE.visibleCount = 60;
             STATE.zoomLevel = 1;
-
+            
             setupChartControls();
-
+            
             await loadData('RTS');
-
+            
             const rts = await fetchQuote('RTS');
             if (rts) STATE.quotes.RTS = rts;
             const si = await fetchQuote('Si');
             if (si) STATE.quotes.Si = si;
-
+            
             updateAll();
-
+            
             window.addEventListener('resize', () => {
                 drawCandleChart();
             });
