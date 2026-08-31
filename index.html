@@ -55,6 +55,15 @@
         ::-webkit-scrollbar-track { background: #1e293b; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
         .zoom-info { font-size: 10px; color: #64748b; text-align: right; flex-shrink: 0; }
+        .inst-btn { background: #334155; border: none; color: #94a3b8; padding: 2px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+        .inst-btn.active { background: #22c55e; color: white; }
+        .inst-btn:hover { background: #475569; color: #e2e8f0; }
+        .price-display { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+        .price-display .label { font-size: 10px; color: #64748b; }
+        .price-display .price { font-size: 14px; font-weight: bold; color: #22c55e; font-family: monospace; }
+        .price-display .change { font-size: 11px; }
+        .price-display .change.positive { color: #22c55e; }
+        .price-display .change.negative { color: #ef4444; }
     </style>
 </head>
 <body>
@@ -80,8 +89,11 @@
                 <!-- График -->
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;flex-wrap:wrap;gap:4px;">
-                        <div class="card-title">📈 ГРАФИК RTS</div>
+                        <div class="card-title" id="chartTitle">📈 ГРАФИК RTS</div>
                         <div class="chart-controls" id="timeframeControls">
+                            <button id="instRTS" class="inst-btn active" onclick="switchInstrument('RTS')">RTS</button>
+                            <button id="instSi" class="inst-btn" onclick="switchInstrument('Si')">Si</button>
+                            <span class="sep">|</span>
                             <button data-interval="1" class="active">1м</button>
                             <button data-interval="5">5м</button>
                             <button data-interval="15">15м</button>
@@ -91,6 +103,12 @@
                             <button id="zoomInV" title="Вертикальный зум +">🔍+</button>
                             <button id="zoomOutV" title="Вертикальный зум -">🔍−</button>
                             <button id="zoomResetV" title="Сбросить вертикальный зум">⟲</button>
+                            <span class="sep">|</span>
+                            <div class="price-display">
+                                <span class="label">Текущая:</span>
+                                <span class="price" id="currentPrice">--</span>
+                                <span class="change" id="priceChange">--</span>
+                            </div>
                         </div>
                     </div>
                     <div id="chart-container">
@@ -148,7 +166,7 @@
 
     <script>
         // ============================================================
-        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК С МАСШТАБИРОВАНИЕМ
+        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК + ЖИВЫЕ КОТИРОВКИ
         // ============================================================
         
         // ---------- СОСТОЯНИЕ ----------
@@ -168,6 +186,7 @@
             zoomMax: 25,
             offset: 0,
             verticalZoom: 1,
+            currentInstrument: 'RTS',
         };
 
         // ---------- ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ ----------
@@ -194,7 +213,7 @@
         }
 
         // ---------- ЗАГРУЗКА С MOEX ----------
-        async function fetchCandlesFromMOEX(instrument, interval = 1, count = 300) {
+        async function fetchCandlesFromMOEX(instrument, interval = 1, count = 500) {
             try {
                 const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
                 const now = new Date();
@@ -245,6 +264,20 @@
             }
         }
 
+        // ---------- ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТОВ ----------
+        window.switchInstrument = async function(instrument) {
+            STATE.currentInstrument = instrument;
+            STATE.zoomLevel = 1;
+            STATE.offset = 0;
+            
+            // Обновляем кнопки
+            document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
+            document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
+            document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
+            
+            await loadData(instrument);
+        };
+
         // ---------- ГРАФИК ----------
         let chartState = {
             isDragging: false,
@@ -274,11 +307,9 @@
             const chartW = W - pad.left - pad.right;
             const chartH = H - pad.top - pad.bottom;
             
-            // Очистка
             ctx.fillStyle = '#0f172a';
             ctx.fillRect(0, 0, W, H);
             
-            // Данные
             let candles = STATE.allCandles;
             if (candles.length === 0) {
                 ctx.fillStyle = '#475569';
@@ -288,7 +319,6 @@
                 return;
             }
             
-            // Применяем смещение и масштаб
             const totalVisible = Math.floor(STATE.visibleCount / STATE.zoomLevel);
             let startIdx = Math.max(0, candles.length - totalVisible - STATE.offset);
             let endIdx = Math.min(candles.length, startIdx + totalVisible);
@@ -309,7 +339,6 @@
                 return;
             }
             
-            // === ВЕРТИКАЛЬНОЕ МАСШТАБИРОВАНИЕ ===
             let min = Infinity, max = -Infinity;
             visible.forEach(c => {
                 if (c.low < min) min = c.low;
@@ -326,7 +355,6 @@
             min -= padding;
             max += padding;
             
-            // Сетка
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 0.5;
             for (let i = 0; i <= 4; i++) {
@@ -343,7 +371,6 @@
                 ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
             }
             
-            // Свечи
             const candleWidth = Math.max(2, Math.min((chartW / visible.length) * 0.7, 20));
             const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
             
@@ -369,7 +396,6 @@
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
             
-            // Маркеры сделок
             STATE.trades.forEach(t => {
                 const tTime = new Date(t.timestamp).getTime();
                 let candleIdx = -1;
@@ -404,7 +430,6 @@
                 ctx.fill();
             });
             
-            // Текущая цена
             if (visible.length > 0) {
                 const last = visible[visible.length-1];
                 const lastY = pad.top + chartH - ((last.close - min) / (max - min)) * chartH;
@@ -414,7 +439,6 @@
                 ctx.fillText(last.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
             }
             
-            // Время
             ctx.fillStyle = '#64748b';
             ctx.font = '9px sans-serif';
             ctx.textAlign = 'center';
@@ -437,7 +461,6 @@
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
             
-            // === ГОРИЗОНТАЛЬНЫЙ ЗУМ (колёсико) ===
             canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 
@@ -452,7 +475,6 @@
                 }
             }, { passive: false });
             
-            // === ДРАГ ДЛЯ СДВИГА ===
             canvas.addEventListener('mousedown', (e) => {
                 chartState.isDragging = true;
                 chartState.dragStartX = e.clientX;
@@ -476,7 +498,6 @@
                 }
             });
             
-            // === ТАЙМФРЕЙМЫ ===
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
@@ -484,11 +505,10 @@
                     STATE.interval = parseInt(btn.dataset.interval);
                     STATE.zoomLevel = 1;
                     STATE.offset = 0;
-                    loadData();
+                    loadData(STATE.currentInstrument || 'RTS');
                 });
             });
             
-            // === ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) ===
             document.getElementById('zoomInV').addEventListener('click', () => {
                 STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
                 drawCandleChart();
@@ -504,14 +524,15 @@
         }
 
         // ---------- ЗАГРУЗКА ДАННЫХ ----------
-        async function loadData() {
-            const candles = await fetchCandlesFromMOEX('RTS', STATE.interval, 500);
+        async function loadData(instrument = 'RTS') {
+            const candles = await fetchCandlesFromMOEX(instrument, STATE.interval, 500);
             if (candles && candles.length > 10) {
                 STATE.allCandles = candles;
                 console.log('✅ Загружено свечей с MOEX:', candles.length);
             } else {
                 const count = Math.max(200, STATE.visibleCount * 3);
-                STATE.allCandles = generateTestCandles(count);
+                const startPrice = instrument === 'RTS' ? 124500 : 89.45;
+                STATE.allCandles = generateTestCandles(count, startPrice);
                 console.log('📊 Используются тестовые свечи:', STATE.allCandles.length);
             }
             drawCandleChart();
@@ -622,6 +643,21 @@
                 `).join('');
             }
             
+            // === ОБНОВЛЕНИЕ ТЕКУЩЕЙ ЦЕНЫ ===
+            const inst = STATE.currentInstrument || 'RTS';
+            const quote = STATE.quotes[inst];
+            if (quote && quote.price > 0) {
+                document.getElementById('currentPrice').textContent = quote.price.toFixed(2);
+                const change = quote.change || 0;
+                const changeEl = document.getElementById('priceChange');
+                changeEl.textContent = (change > 0 ? '+' : '') + change.toFixed(2) + '%';
+                changeEl.className = 'change ' + (change >= 0 ? 'positive' : 'negative');
+            } else {
+                document.getElementById('currentPrice').textContent = '--';
+                document.getElementById('priceChange').textContent = '--';
+                document.getElementById('priceChange').className = 'change';
+            }
+            
             drawCandleChart();
         }
 
@@ -634,17 +670,33 @@
         // ---------- ЦИКЛ ОБНОВЛЕНИЯ ----------
         async function updateAll() {
             try {
+                const inst = STATE.currentInstrument || 'RTS';
+                
+                // Обновляем котировки для обоих инструментов
                 const rts = await fetchQuote('RTS');
                 if (rts && rts.price > 0) STATE.quotes.RTS = rts;
                 
                 const si = await fetchQuote('Si');
                 if (si) STATE.quotes.Si = si;
                 
-                // Обновляем последнюю свечу
-                if (STATE.allCandles.length > 0 && STATE.quotes.RTS.price > 0) {
+                // Обновляем последнюю свечу для текущего инструмента
+                if (STATE.allCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
                     const last = STATE.allCandles[STATE.allCandles.length-1];
-                    if (last && Date.now() - last.time < 120000) {
-                        last.close = STATE.quotes.RTS.price;
+                    const now = Date.now();
+                    if (last && now - last.time > 120000) {
+                        const newCandle = {
+                            time: now - (now % 60000),
+                            open: STATE.quotes[inst].price,
+                            high: STATE.quotes[inst].price,
+                            low: STATE.quotes[inst].price,
+                            close: STATE.quotes[inst].price,
+                        };
+                        STATE.allCandles.push(newCandle);
+                        if (STATE.allCandles.length > 500) {
+                            STATE.allCandles = STATE.allCandles.slice(-500);
+                        }
+                    } else if (last) {
+                        last.close = STATE.quotes[inst].price;
                         if (last.close > last.high) last.high = last.close;
                         if (last.close < last.low) last.low = last.close;
                     }
@@ -660,12 +712,21 @@
         }
 
         // ---------- ИНИЦИАЛИЗАЦИЯ ----------
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             STATE.visibleCount = 60;
             STATE.zoomLevel = 1;
             
             setupChartControls();
-            loadData();
+            
+            // Загружаем данные для RTS
+            await loadData('RTS');
+            
+            // Загружаем котировки
+            const rts = await fetchQuote('RTS');
+            if (rts) STATE.quotes.RTS = rts;
+            const si = await fetchQuote('Si');
+            if (si) STATE.quotes.Si = si;
+            
             updateAll();
             
             window.addEventListener('resize', () => {
