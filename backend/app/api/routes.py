@@ -3,7 +3,8 @@ from typing import Dict, Any, List
 from datetime import datetime
 import logging
 
-from app.models.trade import Trade, TradeCreate, TradeStats
+from app.services.market_data import market_data
+from app.services.demo_account import demo_account
 from app.services.finam_client import finam_client
 from app.strategies.impulse_strategy import ImpulseStrategy
 from app.strategies.level_strategy import LevelStrategy
@@ -14,11 +15,9 @@ router = APIRouter()
 
 # Хранилище активных стратегий
 active_strategies = {}
-
-# WebSocket соединения
 ws_connections = []
 
-@router.get("/")
+@router.get("/status")
 async def get_status():
     """Получить статус системы"""
     return {
@@ -28,34 +27,41 @@ async def get_status():
         "connections": len(ws_connections)
     }
 
+@router.get("/quote/{instrument}")
+async def get_quote(instrument: str):
+    """Получить текущую котировку"""
+    if instrument not in ["RTS", "Si"]:
+        raise HTTPException(status_code=400, detail="Неизвестный инструмент")
+    
+    quote = await market_data.get_quote(instrument)
+    if not quote:
+        raise HTTPException(status_code=503, detail="Нет данных от MOEX")
+    
+    return quote
+
 @router.get("/balance")
 async def get_balance():
-    """Получить баланс счёта"""
-    return await finam_client.get_balance()
+    """Получить баланс демо-счёта"""
+    return demo_account.get_balance()
 
 @router.post("/strategies/start")
 async def start_strategy(instrument: str, strategy_type: str = "impulse"):
-    """
-    Запустить стратегию для инструмента
-    
-    Args:
-        instrument: RTS или Si
-        strategy_type: impulse или level
-    """
+    """Запустить стратегию"""
     if instrument not in ["RTS", "Si"]:
         raise HTTPException(status_code=400, detail="Неподдерживаемый инструмент")
     
     # Создаём стратегию
     if strategy_type == "impulse":
-        strategy = ImpulseStrategy(instrument)
+        strategy = ImpulseStrategy(instrument, demo_account)
     elif strategy_type == "level":
-        strategy = LevelStrategy(instrument)
+        strategy = LevelStrategy(instrument, demo_account)
     else:
         raise HTTPException(status_code=400, detail="Неподдерживаемая стратегия")
     
     # Запускаем
     await strategy.start()
-    active_strategies[f"{instrument}_{strategy_type}"] = strategy
+    key = f"{instrument}_{strategy_type}"
+    active_strategies[key] = strategy
     
     return {
         "status": "started",
@@ -90,37 +96,23 @@ async def list_strategies():
     return result
 
 @router.get("/trades")
-async def get_trades(limit: int = 100):
+async def get_trades(limit: int = 20):
     """Получить последние сделки"""
-    # В демо-версии возвращаем тестовые данные
-    return [
-        {
-            "id": i,
-            "instrument": "RTS" if i % 2 == 0 else "Si",
-            "side": "buy" if i % 3 == 0 else "sell",
-            "price": 120000 + i * 10,
-            "quantity": 1,
-            "timestamp": datetime.now().isoformat(),
-            "status": "filled",
-            "profit": i * 5 if i % 2 == 0 else -i * 3
-        }
-        for i in range(1, min(limit, 20))
-    ]
+    trades = demo_account.trades[-limit:] if demo_account.trades else []
+    return trades
 
 @router.get("/stats")
 async def get_stats():
     """Получить общую статистику"""
-    # В демо-версии возвращаем тестовые данные
-    return TradeStats(
-        total_trades=150,
-        winning_trades=82,
-        losing_trades=68,
-        total_profit=12500.0,
-        win_rate=54.7,
-        avg_profit=152.4,
-        avg_loss=-89.3,
-        max_drawdown=2500.0
-    )
+    return demo_account.get_stats()
+
+@router.post("/trade/close")
+async def close_position(instrument: str):
+    """Закрыть позицию по инструменту"""
+    result = await demo_account.close_position(instrument)
+    if not result:
+        raise HTTPException(status_code=400, detail="Нет открытой позиции")
+    return {"status": "closed", "trade": result}
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -130,27 +122,48 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"WebSocket подключён, всего соединений: {len(ws_connections)}")
     
     try:
-        # Отправляем приветственное сообщение
+        # Отправляем текущие данные
         await websocket.send_json({
             "type": "connected",
             "message": "Подключение установлено",
             "timestamp": datetime.now().isoformat()
         })
         
+        # Отправляем котировки каждые 2 секунды
+        import asyncio
         while True:
-            # Ждём сообщения от клиента
-            data = await websocket.receive_text()
-            logger.debug(f"Получено WebSocket сообщение: {data}")
-            
-            # Отправляем подтверждение
-            await websocket.send_json({
-                "type": "ack",
-                "received": data,
-                "timestamp": datetime.now().isoformat()
-            })
-            
+            try:
+                # Получаем котировки для RTS и Si
+                rts_quote = await market_data.get_quote("RTS")
+                si_quote = await market_data.get_quote("Si")
+                
+                # Получаем баланс и статистику
+                balance = demo_account.get_balance()
+                stats = demo_account.get_stats()
+                
+                await websocket.send_json({
+                    "type": "update",
+                    "timestamp": datetime.now().isoformat(),
+                    "quotes": {
+                        "RTS": rts_quote,
+                        "Si": si_quote
+                    },
+                    "balance": balance,
+                    "stats": stats,
+                    "trades": demo_account.trades[-10:]  # Последние 10 сделок
+                })
+                
+                await asyncio.sleep(2)  # Обновление каждые 2 секунды
+                
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"WebSocket ошибка отправки: {e}")
+                await asyncio.sleep(1)
+                
     except WebSocketDisconnect:
-        ws_connections.remove(websocket)
+        if websocket in ws_connections:
+            ws_connections.remove(websocket)
         logger.info(f"WebSocket отключён, осталось: {len(ws_connections)}")
     except Exception as e:
         logger.error(f"WebSocket ошибка: {e}")
