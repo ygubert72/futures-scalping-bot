@@ -2,77 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Базовые стили для всего приложения */
-body {
+* {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   background-color: #111827;
   color: #f3f4f6;
 }
 
-/* Стили для скроллбара (для красоты) */
+/* Кастомный скролл */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
   background: #1f2937;
-  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #4b5563;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
 }
 
-/* Стили для карточек и панелей */
-.card {
-  background-color: #1f2937;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border: 1px solid #374151;
+/* Для таблицы в правой колонке */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 3px;
 }
 
-.card-hover:hover {
-  border-color: #4b5563;
-  transition: border-color 0.2s;
-}
-
-/* Стили для статусов */
-.status-badge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.status-badge.active {
-  background-color: #10b981;
-  color: white;
-}
-
-.status-badge.inactive {
-  background-color: #6b7280;
-  color: white;
-}
-
-.status-badge.error {
-  background-color: #ef4444;
-  color: white;
-}
-
-.status-badge.warning {
-  background-color: #f59e0b;
-  color: white;
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 2px;
 }
