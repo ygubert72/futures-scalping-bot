@@ -61,15 +61,11 @@
         .price-display .change { font-size: 11px; }
         .price-display .change.positive { color: #22c55e; }
         .price-display .change.negative { color: #ef4444; }
-        .status-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #334155; color: #94a3b8; margin-left: 8px; }
-        .status-badge.ok { background: #166534; color: #86efac; }
-        .status-badge.err { background: #7f1d1d; color: #fca5a5; }
     </style>
 </head>
 <body>
     <div id="app">
         <div class="container">
-            <!-- Шапка -->
             <div class="header">
                 <div>
                     <h1>📊 Scalping Bot</h1>
@@ -85,7 +81,6 @@
             </div>
             
             <div class="grid">
-                <!-- График -->
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;flex-wrap:wrap;gap:4px;">
                         <div class="card-title" id="chartTitle">📈 ГРАФИК RTS</div>
@@ -124,7 +119,6 @@
                     </div>
                 </div>
                 
-                <!-- Правая панель -->
                 <div class="right-panel">
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">⚡ УПРАВЛЕНИЕ</div>
@@ -165,16 +159,13 @@
 
     <script>
         // ============================================================
-        //  ТОРГОВЫЙ БОТ + СВЕЧНОЙ ГРАФИК + АВТО-ОПРЕДЕЛЕНИЕ ИНСТРУМЕНТОВ
+        //  АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ
         // ============================================================
-        
-        // ---------- АВТО-ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ ----------
         const INSTRUMENT_CODES = { RTS: null, Si: null };
         let codesDetected = false;
 
         async function detectInstrumentCodes() {
             try {
-                // Получаем список всех фьючерсов
                 const resp = await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities.json');
                 const data = await resp.json();
                 const rows = data.securities?.data || [];
@@ -183,25 +174,19 @@
                 const secIdx = cols.indexOf('SECID');
                 const nameIdx = cols.indexOf('SHORTNAME');
                 
-                // Ищем RTS и Si
-                let rtsCodes = [];
-                let siCodes = [];
+                let rtsCodes = [], siCodes = [];
                 
                 rows.forEach(row => {
                     const secid = row[secIdx];
                     const name = row[nameIdx] || '';
-                    
-                    // RTS: ищем RTS-* или RTSM-*
                     if (name.startsWith('RTS-') || name.startsWith('RTSM-')) {
                         rtsCodes.push({ secid, name });
                     }
-                    // Si: ищем Si-* или SiM-*
                     if (name.startsWith('Si-') || name.startsWith('SiM-')) {
                         siCodes.push({ secid, name });
                     }
                 });
                 
-                // Сортируем по убыванию (последний месяц — актуальный)
                 const sortByDate = (arr) => {
                     return arr.sort((a, b) => {
                         const dateA = a.name.match(/\d{2}\.\d{2}/)?.[0] || '00.00';
@@ -217,7 +202,6 @@
                     INSTRUMENT_CODES.RTS = sortedRTS[0].secid;
                     console.log(`✅ Найден RTS: ${sortedRTS[0].name} (${INSTRUMENT_CODES.RTS})`);
                 }
-                
                 if (sortedSi.length > 0) {
                     INSTRUMENT_CODES.Si = sortedSi[0].secid;
                     console.log(`✅ Найден Si: ${sortedSi[0].name} (${INSTRUMENT_CODES.Si})`);
@@ -225,10 +209,8 @@
                 
                 codesDetected = true;
                 return true;
-                
             } catch (e) {
-                console.warn('⚠️ Не удалось определить коды инструментов, используем запасные:', e);
-                // Запасные коды
+                console.warn('⚠️ Не удалось определить коды, используем запасные:', e);
                 INSTRUMENT_CODES.RTS = 'RIU6';
                 INSTRUMENT_CODES.Si = 'SIU6';
                 codesDetected = true;
@@ -236,7 +218,9 @@
             }
         }
 
-        // ---------- СОСТОЯНИЕ ----------
+        // ============================================================
+        //  СОСТОЯНИЕ
+        // ============================================================
         const STATE = {
             balance: 100000,
             trades: [],
@@ -256,7 +240,9 @@
             currentInstrument: 'RTS',
         };
 
-        // ---------- ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ ----------
+        // ============================================================
+        //  ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ
+        // ============================================================
         function generateTestCandles(count, startPrice = 124500) {
             const now = Date.now();
             const candles = [];
@@ -280,7 +266,9 @@
             return candles;
         }
 
-        // ---------- ЗАГРУЗКА С MOEX ----------
+        // ============================================================
+        //  ЗАГРУЗКА С MOEX
+        // ============================================================
         async function fetchCandlesFromMOEX(instrument, interval = 1) {
             try {
                 const sec = INSTRUMENT_CODES[instrument];
@@ -350,7 +338,9 @@
             }
         }
 
-        // ---------- ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТОВ ----------
+        // ============================================================
+        //  ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТОВ
+        // ============================================================
         window.switchInstrument = async function(instrument) {
             STATE.currentInstrument = instrument;
             STATE.zoomLevel = 1;
@@ -363,7 +353,9 @@
             await loadData(instrument);
         };
 
-        // ---------- ГРАФИК ----------
+        // ============================================================
+        //  ГРАФИК
+        // ============================================================
         let chartState = {
             isDragging: false,
             dragStartX: 0,
@@ -541,6 +533,9 @@
                 STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
         }
 
+        // ============================================================
+        //  УПРАВЛЕНИЕ ГРАФИКОМ
+        // ============================================================
         function setupChartControls() {
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
@@ -605,6 +600,9 @@
             });
         }
 
+        // ============================================================
+        //  ЗАГРУЗКА ДАННЫХ
+        // ============================================================
         async function loadData(instrument = 'RTS') {
             const interval = STATE.interval;
             const candles = await fetchCandlesFromMOEX(instrument, interval);
@@ -625,7 +623,9 @@
             drawCandleChart();
         }
 
-        // ---------- ТОРГОВЛЯ ----------
+        // ============================================================
+        //  ТОРГОВЛЯ
+        // ============================================================
         function executeTrade(instrument, side, price) {
             const pos = STATE.positions[instrument];
             
@@ -690,6 +690,9 @@
             }
         }
 
+        // ============================================================
+        //  ОТРИСОВКА
+        // ============================================================
         function render() {
             const s = STATE.stats;
             const winRate = s.total ? Math.round((s.wins / s.total) * 100) : 0;
@@ -751,6 +754,9 @@
             render();
         };
 
+        // ============================================================
+        //  ЦИКЛ ОБНОВЛЕНИЯ
+        // ============================================================
         async function updateAll() {
             try {
                 const inst = STATE.currentInstrument || 'RTS';
@@ -792,12 +798,13 @@
             setTimeout(updateAll, 2000);
         }
 
-        // ---------- ИНИЦИАЛИЗАЦИЯ ----------
+        // ============================================================
+        //  ИНИЦИАЛИЗАЦИЯ
+        // ============================================================
         document.addEventListener('DOMContentLoaded', async () => {
             STATE.visibleCount = 60;
             STATE.zoomLevel = 1;
             
-            // Сначала определяем актуальные коды инструментов
             console.log('🔍 Определение актуальных фьючерсов...');
             await detectInstrumentCodes();
             
