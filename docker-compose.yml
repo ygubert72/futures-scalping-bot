@@ -13,6 +13,52 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - bot_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: futures_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - bot_network
+
+  backend:
+    build: ./backend
+    container_name: futures_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://trader:trader123@db:5432/futures_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    networks:
+      - bot_network
+
+  frontend:
+    build: ./frontend
+    container_name: futures_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - bot_network
 
 volumes:
   postgres_data:
+
+networks:
+  bot_network:
+    driver: bridge
