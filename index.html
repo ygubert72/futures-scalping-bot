@@ -20,13 +20,14 @@
         #chart-container { flex: 1; min-height: 0; position: relative; overflow: hidden; }
         #candleChart { width: 100%; height: 100%; display: block; background: #0f172a; border-radius: 6px; cursor: grab; }
         #candleChart:active { cursor: grabbing; }
-        .chart-controls { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding: 6px 0; }
+        .chart-controls { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding: 4px 0; align-items: center; }
         .chart-controls button { 
             background: #334155; border: none; color: #94a3b8; padding: 2px 10px; border-radius: 4px; 
             font-size: 11px; cursor: pointer; transition: all 0.2s; 
         }
         .chart-controls button:hover { background: #475569; color: #e2e8f0; }
         .chart-controls button.active { background: #22c55e; color: white; }
+        .chart-controls .sep { color: #475569; font-size: 11px; margin: 0 2px; }
         .right-panel { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
         .strategy-btn { padding: 3px 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; color: white; transition: all 0.2s; }
         .strategy-btn.active { background: #22c55e; }
@@ -86,6 +87,10 @@
                             <button data-interval="15">15м</button>
                             <button data-interval="60">1ч</button>
                             <button data-interval="240">4ч</button>
+                            <span class="sep">|</span>
+                            <button id="zoomInV" title="Вертикальный зум +">🔍+</button>
+                            <button id="zoomOutV" title="Вертикальный зум -">🔍−</button>
+                            <button id="zoomResetV" title="Сбросить вертикальный зум">⟲</button>
                         </div>
                     </div>
                     <div id="chart-container">
@@ -97,7 +102,7 @@
                             <span id="timeframeLabel">1м</span>
                         </div>
                         <div class="zoom-info">
-                            Колёсико: масштаб | Shift+Drag: сдвиг
+                            Колёсико: гор.масштаб | Ctrl+колёсико: верт.масштаб
                         </div>
                     </div>
                 </div>
@@ -156,10 +161,13 @@
             stats: { total: 0, wins: 0, losses: 0, profit: 0 },
             allCandles: [],
             visibleCandles: [],
-            interval: 1,          // минуты
-            visibleCount: 60,     // сколько свечей показываем
+            interval: 1,
+            visibleCount: 60,
             zoomLevel: 1,
-            offset: 0,            // сдвиг в свечах
+            zoomMin: 0.15,
+            zoomMax: 20,
+            offset: 0,
+            verticalZoom: 1,
         };
 
         // ---------- ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ ----------
@@ -186,7 +194,7 @@
         }
 
         // ---------- ЗАГРУЗКА С MOEX ----------
-        async function fetchCandlesFromMOEX(instrument, interval = 1, count = 200) {
+        async function fetchCandlesFromMOEX(instrument, interval = 1, count = 300) {
             try {
                 const sec = instrument === 'RTS' ? 'RTS-9.26' : 'Si-9.26';
                 const now = new Date();
@@ -285,7 +293,6 @@
             let startIdx = Math.max(0, candles.length - totalVisible - STATE.offset);
             let endIdx = Math.min(candles.length, startIdx + totalVisible);
             
-            // Корректировка при выходе за границы
             if (endIdx - startIdx < 2) {
                 startIdx = Math.max(0, candles.length - totalVisible);
                 endIdx = candles.length;
@@ -302,14 +309,20 @@
                 return;
             }
             
-            // Min/Max
+            // === ВЕРТИКАЛЬНОЕ МАСШТАБИРОВАНИЕ ===
             let min = Infinity, max = -Infinity;
             visible.forEach(c => {
                 if (c.low < min) min = c.low;
                 if (c.high > max) max = c.high;
             });
             const range = max - min || 1;
-            const padding = range * 0.05;
+            
+            const verticalZoom = STATE.verticalZoom || 1;
+            const zoomedRange = range / verticalZoom;
+            const center = (max + min) / 2;
+            min = center - zoomedRange / 2;
+            max = center + zoomedRange / 2;
+            const padding = (max - min) * 0.05;
             min -= padding;
             max += padding;
             
@@ -346,13 +359,11 @@
                 ctx.strokeStyle = isGreen ? '#22c55e' : '#ef4444';
                 ctx.lineWidth = 1;
                 
-                // Тень
                 ctx.beginPath();
                 ctx.moveTo(x + candleWidth/2, yHigh);
                 ctx.lineTo(x + candleWidth/2, yLow);
                 ctx.stroke();
                 
-                // Тело
                 const bodyY = Math.min(yOpen, yClose);
                 const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
@@ -416,26 +427,34 @@
                 ctx.fillText(label, x, H - 5);
             }
             
-            // Обновляем информацию
             document.getElementById('candleCount').textContent = visible.length;
             document.getElementById('timeframeLabel').textContent = 
                 STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
         }
 
-        // ---------- МАСШТАБИРОВАНИЕ ----------
+        // ---------- УПРАВЛЕНИЕ ГРАФИКОМ ----------
         function setupChartControls() {
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
             
-            // Колёсико — масштаб
+            // === ГОРИЗОНТАЛЬНЫЙ ЗУМ (колёсико) ===
             canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                const delta = e.deltaY > 0 ? -0.1 : 0.1;
-                STATE.zoomLevel = Math.max(0.3, Math.min(10, STATE.zoomLevel + delta));
-                drawCandleChart();
+                
+                if (e.ctrlKey || e.metaKey) {
+                    // ВЕРТИКАЛЬНЫЙ ЗУМ
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                    STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
+                    drawCandleChart();
+                } else {
+                    // ГОРИЗОНТАЛЬНЫЙ ЗУМ
+                    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+                    STATE.zoomLevel = Math.max(STATE.zoomMin || 0.15, Math.min(STATE.zoomMax || 20, STATE.zoomLevel + delta));
+                    drawCandleChart();
+                }
             }, { passive: false });
             
-            // Drag — сдвиг
+            // === ДРАГ ДЛЯ СДВИГА ===
             canvas.addEventListener('mousedown', (e) => {
                 chartState.isDragging = true;
                 chartState.dragStartX = e.clientX;
@@ -447,7 +466,7 @@
                 if (!chartState.isDragging) return;
                 const dx = e.clientX - chartState.dragStartX;
                 const totalVisible = Math.floor(STATE.visibleCount / STATE.zoomLevel);
-                const dragCandles = Math.round(dx / 5);
+                const dragCandles = Math.round(dx / 4);
                 STATE.offset = Math.max(0, chartState.dragStartOffset - dragCandles);
                 drawCandleChart();
             });
@@ -459,16 +478,30 @@
                 }
             });
             
-            // Кнопки таймфреймов
-            document.querySelectorAll('#timeframeControls button').forEach(btn => {
+            // === ТАЙМФРЕЙМЫ ===
+            document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    document.querySelectorAll('#timeframeControls button').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     STATE.interval = parseInt(btn.dataset.interval);
                     STATE.zoomLevel = 1;
                     STATE.offset = 0;
                     loadData();
                 });
+            });
+            
+            // === ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) ===
+            document.getElementById('zoomInV').addEventListener('click', () => {
+                STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.2);
+                drawCandleChart();
+            });
+            document.getElementById('zoomOutV').addEventListener('click', () => {
+                STATE.verticalZoom = Math.max(0.2, (STATE.verticalZoom || 1) - 0.2);
+                drawCandleChart();
+            });
+            document.getElementById('zoomResetV').addEventListener('click', () => {
+                STATE.verticalZoom = 1;
+                drawCandleChart();
             });
         }
 
@@ -479,8 +512,7 @@
                 STATE.allCandles = candles;
                 console.log('✅ Загружено свечей с MOEX:', candles.length);
             } else {
-                // Если нет данных — генерируем
-                const count = Math.max(100, STATE.visibleCount * 2);
+                const count = Math.max(150, STATE.visibleCount * 2);
                 STATE.allCandles = generateTestCandles(count);
                 console.log('📊 Используются тестовые свечи:', STATE.allCandles.length);
             }
@@ -555,94 +587,4 @@
         // ---------- ОТРИСОВКА ----------
         function render() {
             const s = STATE.stats;
-            const winRate = s.total ? Math.round((s.wins / s.total) * 100) : 0;
-            const profit = Math.round(s.profit * 100) / 100;
-
-            document.getElementById('balanceDisplay').textContent = Math.round(STATE.balance) + ' ₽';
-            document.getElementById('rtsQuote').textContent = `RTS: ${STATE.quotes.RTS.price ? STATE.quotes.RTS.price.toFixed(2) : '--'}`;
-            document.getElementById('siQuote').textContent = `Si: ${STATE.quotes.Si.price ? STATE.quotes.Si.price.toFixed(2) : '--'}`;
-
-            document.getElementById('totalTrades').textContent = s.total;
-            document.getElementById('winRate').textContent = winRate + '%';
-            document.getElementById('totalProfit').textContent = (profit > 0 ? '+' : '') + profit + ' ₽';
-            document.getElementById('totalProfit').className = 'value ' + (profit >= 0 ? 'green' : 'red');
-
-            const rtsBtn = document.getElementById('rtsBtn');
-            const siBtn = document.getElementById('siBtn');
-            rtsBtn.textContent = (STATE.strategies.RTS ? '⏹' : '▶') + ' RTS';
-            rtsBtn.className = 'strategy-btn ' + (STATE.strategies.RTS ? 'active' : 'inactive');
-            siBtn.textContent = (STATE.strategies.Si ? '⏹' : '▶') + ' Si';
-            siBtn.className = 'strategy-btn ' + (STATE.strategies.Si ? 'active' : 'inactive');
-            document.getElementById('strategyStatus').textContent = 
-                (STATE.strategies.RTS || STATE.strategies.Si) ? '🟢 Активны' : '⏸ Остановлены';
-
-            const tbody = document.getElementById('tradesBody');
-            const trades = STATE.trades.slice(-15).reverse();
-            if (trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок</td></tr>';
-            } else {
-                tbody.innerHTML = trades.map(t => `
-                    <tr>
-                        <td>${t.timeStr}</td>
-                        <td>${t.instrument}</td>
-                        <td><span class="badge ${t.side === 'buy' ? 'buy' : 'sell'}">${t.side === 'buy' ? 'Покуп' : 'Продаж'}</span></td>
-                        <td>${t.price.toFixed(2)}</td>
-                        <td style="text-align:right;font-weight:bold;" class="${t.profit >= 0 ? 'profit-positive' : 'profit-negative'}">${t.profit >= 0 ? '+' : ''}${t.profit}</td>
-                    </tr>
-                `).join('');
-            }
-            
-            drawCandleChart();
-        }
-
-        // ---------- УПРАВЛЕНИЕ ----------
-        window.toggleStrategy = function(instrument) {
-            STATE.strategies[instrument] = !STATE.strategies[instrument];
-            render();
-        };
-
-        // ---------- ЦИКЛ ОБНОВЛЕНИЯ ----------
-        async function updateAll() {
-            try {
-                const rts = await fetchQuote('RTS');
-                if (rts && rts.price > 0) STATE.quotes.RTS = rts;
-                
-                const si = await fetchQuote('Si');
-                if (si) STATE.quotes.Si = si;
-                
-                // Обновляем последнюю свечу если есть данные
-                if (STATE.allCandles.length > 0 && STATE.quotes.RTS.price > 0) {
-                    const last = STATE.allCandles[STATE.allCandles.length-1];
-                    if (last && Date.now() - last.time < 120000) {
-                        // Обновляем только close
-                        last.close = STATE.quotes.RTS.price;
-                        if (last.close > last.high) last.high = last.close;
-                        if (last.close < last.low) last.low = last.close;
-                    }
-                }
-                
-                runStrategies();
-                render();
-            } catch (e) {
-                console.error('Ошибка обновления:', e);
-            }
-            
-            setTimeout(updateAll, 2000);
-        }
-
-        // ---------- ИНИЦИАЛИЗАЦИЯ ----------
-        document.addEventListener('DOMContentLoaded', () => {
-            STATE.visibleCount = 60;
-            STATE.zoomLevel = 1;
-            
-            setupChartControls();
-            loadData();
-            updateAll();
-            
-            window.addEventListener('resize', () => {
-                drawCandleChart();
-            });
-        });
-    </script>
-</body>
-</html>
+            const win
