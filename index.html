@@ -6,6 +6,7 @@
     <title>Futures Scalping Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* ... все стили без изменений ... */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; overflow: hidden; }
         .container { max-width: 1500px; margin: 0 auto; padding: 10px; height: 100vh; display: flex; flex-direction: column; }
@@ -255,7 +256,18 @@
         };
 
         // ============================================================
-        //  ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ (С ЗАЩИТОЙ ОТ ОТРИЦАТЕЛЬНЫХ ЦЕН)
+        //  АДАПТИВНОЕ КОЛИЧЕСТВО СВЕЧЕЙ
+        // ============================================================
+        function getOptimalCandleCount() {
+            const container = document.getElementById('chart-container');
+            if (!container) return 60;
+            const width = container.getBoundingClientRect().width;
+            // На каждые 12 пикселей — 1 свеча (для читаемости)
+            return Math.max(20, Math.floor(width / 12));
+        }
+
+        // ============================================================
+        //  ГЕНЕРАЦИЯ ТЕСТОВЫХ ДАННЫХ
         // ============================================================
         function generateTestCandles(count, startPrice, stepMinutes = 1) {
             const now = Date.now();
@@ -266,7 +278,6 @@
                 const change = (Math.random() - 0.5) * 300 * volMultiplier * 2;
                 const open = price;
                 let close = price + change;
-                // 🛡️ ЗАЩИТА ОТ ОТРИЦАТЕЛЬНЫХ ЦЕН
                 if (close < startPrice * 0.1) {
                     close = startPrice * 0.1 + Math.random() * 100;
                 }
@@ -360,6 +371,7 @@
             STATE.currentInstrument = instrument;
             STATE.zoomLevel = 1;
             STATE.offset = 0;
+            STATE.visibleCount = getOptimalCandleCount();
             
             document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
             document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
@@ -441,7 +453,6 @@
                 if (c.high > max) max = c.high;
             });
             
-            // 🔧 АДАПТИВНЫЙ ДИАПАЗОН
             const range = max - min || 1;
             const minRange = inst === 'RTS' ? 2 : 0.05;
             const finalRange = Math.max(range, minRange);
@@ -502,7 +513,6 @@
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
             
-            // СДЕЛКИ ТОЛЬКО ПО ТЕКУЩЕМУ ИНСТРУМЕНТУ
             STATE.trades.forEach(t => {
                 if (t.instrument !== inst) return;
                 
@@ -618,6 +628,7 @@
                     STATE.zoomLevel = 1;
                     STATE.verticalZoom = 1;
                     STATE.offset = 0;
+                    STATE.visibleCount = getOptimalCandleCount();
                     
                     loadCandles(STATE.currentInstrument || 'RTS');
                 });
@@ -647,7 +658,7 @@
                 STATE.candles[instrument] = candles;
                 console.log(`✅ Загружено свечей (${instrument}, ${interval}м):`, candles.length);
             } else {
-                let count = 100;
+                let count = Math.max(60, STATE.visibleCount * 1.5);
                 if (interval === 1) count = 60;
                 else if (interval === 5) count = 80;
                 else if (interval === 15) count = 80;
@@ -935,7 +946,7 @@
         //  ИНИЦИАЛИЗАЦИЯ
         // ============================================================
         document.addEventListener('DOMContentLoaded', async () => {
-            STATE.visibleCount = 60;
+            STATE.visibleCount = getOptimalCandleCount();
             STATE.zoomLevel = 1;
             
             console.log('🔍 Определение актуальных фьючерсов...');
@@ -957,6 +968,7 @@
             document.getElementById('exportBtn').addEventListener('click', exportToExcel);
             
             window.addEventListener('resize', () => {
+                STATE.visibleCount = getOptimalCandleCount();
                 drawCandleChart();
             });
         });
