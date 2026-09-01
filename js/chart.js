@@ -104,9 +104,9 @@ function drawCandleChart() {
     const minRange = inst === 'RTS' ? 2 : 0.05;
     const finalRange = Math.max(range, minRange);
     
-    // Центр графика (средняя цена)
+    // ЦЕНТР ГРАФИКА (фиксируем для вертикального зума)
     const center = (max + min) / 2;
-    const halfRange = finalRange * 0.6; // чуть больше запаса
+    const halfRange = finalRange * 0.6;
     
     let priceMin = center - halfRange;
     let priceMax = center + halfRange;
@@ -138,9 +138,10 @@ function drawCandleChart() {
         ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
     }
 
-    // ========== 6. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ (АДАПТИВНАЯ) ==========
-    // Ширина свечи зависит от количества видимых свечей
-    const candleWidth = Math.max(2, Math.min((chartW / visible.length) * 0.7, 20));
+    // ========== 6. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ (ИСПРАВЛЕНО!) ==========
+    // Минимальная ширина свечи — 4px, максимальная — 30px
+    let candleWidth = (chartW / visible.length) * 0.75;
+    candleWidth = Math.max(4, Math.min(30, candleWidth));
     const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
     
     // ========== 7. РИСОВАНИЕ СВЕЧЕЙ ==========
@@ -237,23 +238,23 @@ function setupChartControls() {
     const canvas = document.getElementById('candleChart');
     if (!canvas) return;
     
-    // ===== ГОРИЗОНТАЛЬНЫЙ ЗУМ =====
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         if (e.ctrlKey || e.metaKey) {
-            // Вертикальный зум (с сохранением центра)
+            // Вертикальный зум
             const delta = e.deltaY > 0 ? -0.15 : 0.15;
-            STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
+            const newZoom = (STATE.verticalZoom || 1) + delta;
+            STATE.verticalZoom = Math.max(0.2, Math.min(10, newZoom));
             drawCandleChart();
         } else {
             // Горизонтальный зум
             const delta = e.deltaY > 0 ? -0.15 : 0.15;
-            STATE.zoomLevel = Math.max(0.1, Math.min(10, STATE.zoomLevel + delta));
+            const newZoom = STATE.zoomLevel + delta;
+            STATE.zoomLevel = Math.max(0.1, Math.min(10, newZoom));
             drawCandleChart();
         }
     }, { passive: false });
     
-    // ===== ДРАГ =====
     canvas.addEventListener('mousedown', (e) => {
         chartState.isDragging = true;
         chartState.dragStartX = e.clientX;
@@ -276,7 +277,6 @@ function setupChartControls() {
         }
     });
     
-    // ===== ПЕРЕКЛЮЧЕНИЕ ТАЙМФРЕЙМОВ =====
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
@@ -302,7 +302,6 @@ function setupChartControls() {
         });
     });
     
-    // ===== ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) =====
     document.getElementById('zoomInV').addEventListener('click', () => {
         STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
         drawCandleChart();
@@ -317,7 +316,6 @@ function setupChartControls() {
     });
 }
 
-// ===== ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА =====
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
     STATE.zoomLevel = 1;
