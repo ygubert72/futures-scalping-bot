@@ -12,7 +12,7 @@ const firebaseConfig = {
     storageBucket: "futures-scalping-bot.firebasestorage.app",
     messagingSenderId: "29947087757",
     appId: "1:29947087757:web:a3eef514422c8810b44bc4",
-    databaseURL: "https://futures-scalping-bot-default-rtdb.europe-west1.firebasedatabase.app"
+    databaseURL: "https://futures-scalping-bot-default-rtdb.firebaseio.com/"
 };
 
 const app = initializeApp(firebaseConfig);
