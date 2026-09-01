@@ -103,10 +103,20 @@ function drawCandleChart() {
         if (c.high > max) max = c.high;
     });
     
-    // Если центр ещё не зафиксирован — фиксируем
+    // ПРИНУДИТЕЛЬНО пересчитываем центр на основе ТЕКУЩИХ видимых свечей
+    const newCenter = (max + min) / 2;
+    
+    // Если центр ещё не зафиксирован или был сброшен — фиксируем
     if (window.fixedChartCenter === null || window.fixedChartCenter === undefined) {
-        window.fixedChartCenter = (max + min) / 2;
+        window.fixedChartCenter = newCenter;
         console.log(`📌 Центр зафиксирован для ${inst} (${STATE.interval}м):`, window.fixedChartCenter);
+    } else {
+        // Если центр уже есть, но график уехал — принудительно обновляем
+        const diff = Math.abs(newCenter - window.fixedChartCenter);
+        if (diff > 5) { // Если разница больше 5 пунктов — обновляем центр
+            window.fixedChartCenter = newCenter;
+            console.log(`🔄 Центр обновлён для ${inst} (${STATE.interval}м):`, window.fixedChartCenter);
+        }
     }
     
     // Диапазон цен
