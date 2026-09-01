@@ -7,15 +7,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     await detectInstrumentCodes();
     console.log('📊 Используемые коды:', INSTRUMENT_CODES);
     
-    // setupChartControls(); // ← ЗАКОММЕНТИРУЙ ЭТУ СТРОКУ
+    // Настраиваем управление графиком (кнопки таймфреймов)
+    setupChartControls();
     
+    // Загружаем свечи для RTS
     await loadMinuteCandles('RTS');
     
+    // Получаем текущие котировки
     const rts = await fetchQuote('RTS');
     if (rts) STATE.quotes.RTS = rts;
     const si = await fetchQuote('Si');
     if (si) STATE.quotes.Si = si;
     
+    // Отрисовываем интерфейс
     render();
     
     // ============================================================
@@ -25,12 +29,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const inst = STATE.currentInstrument || 'RTS';
             
+            // Обновляем котировки
             const rts = await fetchQuote('RTS');
             if (rts && rts.price > 0) STATE.quotes.RTS = rts;
             
             const si = await fetchQuote('Si');
             if (si && si.price > 0) STATE.quotes.Si = si;
             
+            // Обновляем свечи
             const minuteCandles = STATE.minuteCandles[inst];
             if (minuteCandles && minuteCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
                 const last = minuteCandles[minuteCandles.length-1];
@@ -64,7 +70,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
             
+            // Запускаем стратегии
             runStrategies();
+            
+            // Отрисовываем интерфейс
             render();
         } catch (e) {
             console.error('Ошибка обновления:', e);
@@ -75,6 +84,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     updateAll();
     
+    // Экспорт отчёта
     document.getElementById('exportBtn').addEventListener('click', exportToExcel);
+    
+    // Обновление графика при ресайзе
     window.addEventListener('resize', drawCandleChart);
 });
