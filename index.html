@@ -9,11 +9,100 @@
 </head>
 <body>
     <div id="app">
-        <!-- Весь HTML как был, без изменений -->
-        <!-- ... -->
+        <div class="container">
+            <div class="header">
+                <div>
+                    <h1>📊 Scalping Bot</h1>
+                    <div style="display:flex;gap:14px;font-size:11px;color:#94a3b8;margin-top:1px;">
+                        <span id="rtsQuote">RTS: --</span>
+                        <span id="siQuote">Si: --</span>
+                    </div>
+                </div>
+                <div class="balance">
+                    <div class="label">БАЛАНС</div>
+                    <div class="amount" id="balanceDisplay">100 000 ₽</div>
+                </div>
+            </div>
+            
+            <div class="grid">
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;flex-wrap:wrap;gap:4px;">
+                        <div class="card-title" id="chartTitle">📈 ГРАФИК RTS</div>
+                        <div class="chart-controls" id="timeframeControls">
+                            <button id="instRTS" class="inst-btn active" onclick="switchInstrument('RTS')">RTS</button>
+                            <button id="instSi" class="inst-btn" onclick="switchInstrument('Si')">Si</button>
+                            <span class="sep">|</span>
+                            <button data-interval="1" class="active">1м</button>
+                            <button data-interval="5">5м</button>
+                            <button data-interval="15">15м</button>
+                            <button data-interval="60">1ч</button>
+                            <button data-interval="240">4ч</button>
+                            <span class="sep">|</span>
+                            <button id="zoomInV" title="Вертикальный зум +">🔍+</button>
+                            <button id="zoomOutV" title="Вертикальный зум -">🔍−</button>
+                            <button id="zoomResetV" title="Сбросить вертикальный зум">⟲</button>
+                            <span class="sep">|</span>
+                            <div class="price-display">
+                                <span class="label">Текущая:</span>
+                                <span class="price" id="currentPrice">--</span>
+                                <span class="change" id="priceChange">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="chart-container">
+                        <canvas id="candleChart"></canvas>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;flex-shrink:0;padding-top:4px;">
+                        <div style="font-size:10px;color:#64748b;">
+                            <span id="candleCount">0</span> свечей · 
+                            <span id="timeframeLabel">1м</span>
+                        </div>
+                        <div class="zoom-info">
+                            Колёсико: гор.масштаб | Ctrl+колёсико: верт.масштаб
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="right-panel">
+                    <div class="card" style="flex-shrink:0;">
+                        <div class="card-title">⚡ УПРАВЛЕНИЕ</div>
+                        <div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
+                            <button id="rtsBtn" class="strategy-btn inactive" onclick="toggleStrategy('RTS')">▶ RTS</button>
+                            <button id="siBtn" class="strategy-btn inactive" onclick="toggleStrategy('Si')">▶ Si</button>
+                        </div>
+                        <div id="strategyStatus" style="font-size:11px;color:#94a3b8;">⏸ Остановлены</div>
+                    </div>
+                    
+                    <div class="card" style="flex-shrink:0;">
+                        <div class="card-title">📊 СТАТИСТИКА</div>
+                        <div class="stats-grid">
+                            <div class="stat-item"><div class="value" id="totalTrades">0</div><div class="label">Сделок</div></div>
+                            <div class="stat-item"><div class="value green" id="winRate">0%</div><div class="label">Win Rate</div></div>
+                            <div class="stat-item"><div class="value green" id="totalProfit">0 ₽</div><div class="label">Профит</div></div>
+                            <div class="stat-item"><div class="value yellow" id="drawdown">0%</div><div class="label">Просадка</div></div>
+                        </div>
+                        <button id="exportBtn" class="export-btn">📥 Экспорт отчёта (Excel)</button>
+                    </div>
+                    
+                    <div class="card" style="flex:1;min-height:0;">
+                        <div class="card-title">📋 СДЕЛКИ</div>
+                        <div class="trades-table">
+                            <div class="scroll">
+                                <table>
+                                    <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Цена</th><th style="text-align:right;">P&L</th></tr></thead>
+                                    <tbody id="tradesBody">
+                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Подключаем все скрипты по порядку -->
+    <!-- Подключаем все скрипты ПО ПОРЯДКУ -->
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
     <script src="js/chart.js"></script>
