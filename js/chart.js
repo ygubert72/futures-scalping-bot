@@ -103,23 +103,25 @@ function drawCandleChart() {
     const range = max - min || 1;
     const minRange = inst === 'RTS' ? 2 : 0.05;
     const finalRange = Math.max(range, minRange);
+    
+    // Центр графика (средняя цена)
     const center = (max + min) / 2;
-    const halfRange = finalRange * 0.55;
+    const halfRange = finalRange * 0.6; // чуть больше запаса
     
-    min = center - halfRange;
-    max = center + halfRange;
+    let priceMin = center - halfRange;
+    let priceMax = center + halfRange;
     
+    // ========== 4. ВЕРТИКАЛЬНЫЙ ЗУМ (с сохранением центра) ==========
     const verticalZoom = STATE.verticalZoom || 1;
-    const zoomedRange = (max - min) / verticalZoom;
-    const zoomCenter = (max + min) / 2;
-    min = zoomCenter - zoomedRange / 2;
-    max = zoomCenter + zoomedRange / 2;
+    const zoomedRange = (priceMax - priceMin) / verticalZoom;
+    priceMin = center - zoomedRange / 2;
+    priceMax = center + zoomedRange / 2;
     
-    const padding = (max - min) * 0.05;
-    min -= padding;
-    max += padding;
+    const padding = (priceMax - priceMin) * 0.05;
+    priceMin -= padding;
+    priceMax += padding;
 
-    // ========== 4. СЕТКА ==========
+    // ========== 5. СЕТКА ==========
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= 4; i++) {
@@ -129,24 +131,25 @@ function drawCandleChart() {
         ctx.lineTo(W - pad.right, y);
         ctx.stroke();
         
-        const price = max - (i / 4) * (max - min);
+        const price = priceMax - (i / 4) * (priceMax - priceMin);
         ctx.fillStyle = '#64748b';
         ctx.font = '10px monospace';
         ctx.textAlign = 'right';
         ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
     }
 
-    // ========== 5. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ (АДАПТИВНАЯ) ==========
+    // ========== 6. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ (АДАПТИВНАЯ) ==========
+    // Ширина свечи зависит от количества видимых свечей
     const candleWidth = Math.max(2, Math.min((chartW / visible.length) * 0.7, 20));
     const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
     
-    // ========== 6. РИСОВАНИЕ СВЕЧЕЙ ==========
+    // ========== 7. РИСОВАНИЕ СВЕЧЕЙ ==========
     visible.forEach((c, i) => {
         const x = pad.left + (i / visible.length) * chartW + gap/2;
-        const yHigh = pad.top + chartH - ((c.high - min) / (max - min)) * chartH;
-        const yLow = pad.top + chartH - ((c.low - min) / (max - min)) * chartH;
-        const yOpen = pad.top + chartH - ((c.open - min) / (max - min)) * chartH;
-        const yClose = pad.top + chartH - ((c.close - min) / (max - min)) * chartH;
+        const yHigh = pad.top + chartH - ((c.high - priceMin) / (priceMax - priceMin)) * chartH;
+        const yLow = pad.top + chartH - ((c.low - priceMin) / (priceMax - priceMin)) * chartH;
+        const yOpen = pad.top + chartH - ((c.open - priceMin) / (priceMax - priceMin)) * chartH;
+        const yClose = pad.top + chartH - ((c.close - priceMin) / (priceMax - priceMin)) * chartH;
         
         const isGreen = c.close >= c.open;
         ctx.fillStyle = isGreen ? '#22c55e' : '#ef4444';
@@ -165,7 +168,7 @@ function drawCandleChart() {
         ctx.fillRect(x, bodyY, candleWidth, bodyH);
     });
 
-    // ========== 7. МЕТКИ СДЕЛОК ==========
+    // ========== 8. МЕТКИ СДЕЛОК ==========
     STATE.trades.forEach(t => {
         if (t.instrument !== inst) return;
         
@@ -185,7 +188,7 @@ function drawCandleChart() {
         
         const c = visible[candleIdx];
         const x = pad.left + (candleIdx / visible.length) * chartW + candleWidth/2;
-        const y = pad.top + chartH - ((c.close - min) / (max - min)) * chartH;
+        const y = pad.top + chartH - ((c.close - priceMin) / (priceMax - priceMin)) * chartH;
         
         ctx.fillStyle = t.side === 'buy' ? '#22c55e' : '#ef4444';
         ctx.beginPath();
@@ -202,17 +205,17 @@ function drawCandleChart() {
         ctx.fill();
     });
 
-    // ========== 8. ПОСЛЕДНЯЯ ЦЕНА ==========
+    // ========== 9. ПОСЛЕДНЯЯ ЦЕНА ==========
     if (visible.length > 0) {
         const last = visible[visible.length-1];
-        const lastY = pad.top + chartH - ((last.close - min) / (max - min)) * chartH;
+        const lastY = pad.top + chartH - ((last.close - priceMin) / (priceMax - priceMin)) * chartH;
         ctx.fillStyle = '#22c55e';
         ctx.font = '11px monospace';
         ctx.textAlign = 'left';
         ctx.fillText(last.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
     }
 
-    // ========== 9. ВРЕМЕНА ==========
+    // ========== 10. ВРЕМЕНА ==========
     ctx.fillStyle = '#64748b';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'center';
@@ -234,19 +237,23 @@ function setupChartControls() {
     const canvas = document.getElementById('candleChart');
     if (!canvas) return;
     
+    // ===== ГОРИЗОНТАЛЬНЫЙ ЗУМ =====
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         if (e.ctrlKey || e.metaKey) {
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            // Вертикальный зум (с сохранением центра)
+            const delta = e.deltaY > 0 ? -0.15 : 0.15;
             STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
             drawCandleChart();
         } else {
+            // Горизонтальный зум
             const delta = e.deltaY > 0 ? -0.15 : 0.15;
             STATE.zoomLevel = Math.max(0.1, Math.min(10, STATE.zoomLevel + delta));
             drawCandleChart();
         }
     }, { passive: false });
     
+    // ===== ДРАГ =====
     canvas.addEventListener('mousedown', (e) => {
         chartState.isDragging = true;
         chartState.dragStartX = e.clientX;
@@ -269,6 +276,7 @@ function setupChartControls() {
         }
     });
     
+    // ===== ПЕРЕКЛЮЧЕНИЕ ТАЙМФРЕЙМОВ =====
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
@@ -277,7 +285,7 @@ function setupChartControls() {
             STATE.zoomLevel = 1;
             STATE.verticalZoom = 1;
             STATE.offset = 0;
-            // Обновляем свечи для нового интервала
+            
             const inst = STATE.currentInstrument || 'RTS';
             const minuteCandles = STATE.minuteCandles[inst] || [];
             if (minuteCandles.length > 0) {
@@ -294,6 +302,7 @@ function setupChartControls() {
         });
     });
     
+    // ===== ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) =====
     document.getElementById('zoomInV').addEventListener('click', () => {
         STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
         drawCandleChart();
@@ -308,10 +317,11 @@ function setupChartControls() {
     });
 }
 
-// Переключение инструмента
+// ===== ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА =====
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
     STATE.zoomLevel = 1;
+    STATE.verticalZoom = 1;
     STATE.offset = 0;
     
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
@@ -321,7 +331,6 @@ window.switchInstrument = async function(instrument) {
     if (STATE.minuteCandles[instrument].length === 0) {
         await loadMinuteCandles(instrument);
     }
-    // Обновляем свечи для текущего интервала
     const minuteCandles = STATE.minuteCandles[instrument] || [];
     if (minuteCandles.length > 0) {
         if (STATE.interval === 1) {
@@ -346,7 +355,6 @@ async function loadMinuteCandles(instrument = 'RTS') {
         STATE.minuteCandles[instrument] = generateTestCandles(200, startPrice, 1);
         console.log(`📊 Используются тестовые 1м свечи (${instrument})`);
     }
-    // Обновляем свечи для текущего интервала
     const minuteCandles = STATE.minuteCandles[instrument] || [];
     if (minuteCandles.length > 0) {
         if (STATE.interval === 1) {
