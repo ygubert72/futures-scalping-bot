@@ -1000,5 +1000,47 @@
             });
         });
     </script>
+<script type="module">
+  // ============================================================
+  //  FIREBASE НАСТРОЙКА
+  // ============================================================
+  
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getDatabase, ref, push, set, get } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDaHs-CLoLaAfBDMsTL35DfjhtLryAkaB0",
+    authDomain: "futures-scalping-bot.firebaseapp.com",
+    projectId: "futures-scalping-bot",
+    storageBucket: "futures-scalping-bot.firebasestorage.app",
+    messagingSenderId: "29947087757",
+    appId: "1:29947087757:web:a3eef514422c8810b44bc4",
+    databaseURL: "https://futures-scalping-bot-default-rtdb.europe-west1.firebasedatabase.app"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  console.log('🔥 Firebase готов!');
+
+  // Сохраняем сделки в Firebase
+  const originalExecuteTrade = window.executeTrade;
+  window.executeTrade = function(instrument, side, price) {
+    const result = originalExecuteTrade(instrument, side, price);
+    if (side === 'sell') {
+      const lastTrade = STATE.trades[STATE.trades.length - 1];
+      if (lastTrade) {
+        push(ref(db, 'trades'), {
+          instrument: lastTrade.instrument,
+          side: lastTrade.side,
+          price: lastTrade.price,
+          profit: lastTrade.profit,
+          timestamp: lastTrade.timestamp,
+          balance: STATE.balance
+        });
+      }
+    }
+    return result;
+  };
+</script>
 </body>
 </html>
