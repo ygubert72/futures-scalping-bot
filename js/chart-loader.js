@@ -8,7 +8,6 @@ let candlestickSeries = null;
 // Функция для загрузки библиотеки
 async function loadLightweightCharts() {
     try {
-        // Используем CDN с ESM-версией
         const module = await import('https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.esm.js');
         return module;
     } catch (error) {
@@ -160,7 +159,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Экспортируем
+// ===== ЗАГЛУШКА ДЛЯ setupChartControls =====
+window.setupChartControls = function() {
+    console.log('✅ setupChartControls (заглушка)');
+};
+
+// ===== ЭКСПОРТЫ =====
 window.drawCandleChart = drawCandleChart;
 window.destroyChart = function() {
     if (window._resizeObserver) {
@@ -177,3 +181,5 @@ window.destroyChart = function() {
         container.innerHTML = '';
     }
 };
+
+console.log('📊 chart-loader.js загружен');
