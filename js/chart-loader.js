@@ -123,6 +123,73 @@ async function drawCandleChart() {
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
 }
 
+// ===== ФУНКЦИЯ ЗАГРУЗКИ СВЕЧЕЙ (ГЛОБАЛЬНАЯ) =====
+async function loadMinuteCandles(instrument = 'RTS') {
+    const candles = await fetchMinuteCandles(instrument);
+    if (candles && candles.length > 10) {
+        STATE.minuteCandles[instrument] = candles;
+        console.log(`✅ Загружено 1м свечей (${instrument}):`, candles.length);
+    } else {
+        const startPrice = instrument === 'RTS' ? 78000 : 88;
+        STATE.minuteCandles[instrument] = generateTestCandles(200, startPrice, 1);
+        console.log(`📊 Используются тестовые 1м свечи (${instrument})`);
+    }
+    const minuteCandles = STATE.minuteCandles[instrument] || [];
+    if (minuteCandles.length > 0) {
+        const interval = STATE.interval || 1;
+        STATE.candles[instrument] = interval === 1 
+            ? minuteCandles 
+            : aggregateCandles(minuteCandles, interval);
+        if (STATE.candles[instrument].length > STATE.maxCandles) {
+            STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
+        }
+    }
+    await drawCandleChart();
+}
+
+// ===== ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ИНСТРУМЕНТА =====
+window.switchInstrument = async function(instrument) {
+    STATE.currentInstrument = instrument;
+    
+    document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
+    document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
+    document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
+    
+    if (STATE.minuteCandles[instrument].length === 0) {
+        await loadMinuteCandles(instrument);
+    }
+    await drawCandleChart();
+};
+
+// ===== ФУНКЦИЯ ОБНОВЛЕНИЯ ТАЙМФРЕЙМА =====
+function updateTimeframe(interval) {
+    STATE.interval = interval;
+    const inst = STATE.currentInstrument || 'RTS';
+    const minuteCandles = STATE.minuteCandles[inst] || [];
+    
+    if (minuteCandles.length > 0) {
+        STATE.candles[inst] = interval === 1 
+            ? minuteCandles 
+            : aggregateCandles(minuteCandles, interval);
+        if (STATE.candles[inst].length > STATE.maxCandles) {
+            STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
+        }
+    }
+    drawCandleChart();
+}
+
+// ===== НАСТРОЙКА КНОПОК ТАЙМФРЕЙМОВ =====
+function setupChartControls() {
+    document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            updateTimeframe(parseInt(this.dataset.interval));
+        });
+    });
+    console.log('✅ Управление графиком настроено');
+}
+
 // ===== ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) =====
 document.addEventListener('DOMContentLoaded', function() {
     const zoomInBtn = document.getElementById('zoomInV');
@@ -159,13 +226,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// ===== ЗАГЛУШКА ДЛЯ setupChartControls =====
-window.setupChartControls = function() {
-    console.log('✅ setupChartControls (заглушка)');
-};
-
-// ===== ЭКСПОРТЫ =====
+// ===== ЭКСПОРТЫ В ГЛОБАЛЬНЫЙ ОБЪЕКТ =====
 window.drawCandleChart = drawCandleChart;
+window.loadMinuteCandles = loadMinuteCandles;
+window.setupChartControls = setupChartControls;
+window.updateTimeframe = updateTimeframe;
+
 window.destroyChart = function() {
     if (window._resizeObserver) {
         window._resizeObserver.disconnect();
