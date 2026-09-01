@@ -1,11 +1,10 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts)
+//  ГРАФИК (lightweight-charts) — упрощённая версия
 // ============================================================
 
 let chartInstance = null;
 let candlestickSeries = null;
 
-// Функция для получения данных из STATE
 function getCandleData(instrument) {
     const candles = STATE.candles[instrument] || [];
     return candles.map(c => ({
@@ -17,18 +16,17 @@ function getCandleData(instrument) {
     }));
 }
 
-// Создание или обновление графика
 function drawCandleChart() {
     const container = document.getElementById('chart-container');
     if (!container) {
-        console.error('Контейнер chart-container не найден');
+        console.error('Контейнер не найден');
         return;
     }
 
     // Проверяем, что библиотека загружена
     if (typeof LightweightCharts === 'undefined') {
-        console.error('❌ Библиотека lightweight-charts не загружена!');
-        container.innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px;">Ошибка загрузки библиотеки графиков</div>';
+        console.error('❌ Библиотека не загружена!');
+        container.innerHTML = '<div style="color:#ef4444;padding:20px;">Ошибка: библиотека графиков не загружена</div>';
         return;
     }
 
@@ -36,39 +34,19 @@ function drawCandleChart() {
     const data = getCandleData(instrument);
 
     if (data.length === 0) {
-        container.innerHTML = '<div style="color:#64748b;text-align:center;padding:20px;">Загрузка данных...</div>';
+        container.innerHTML = '<div style="color:#64748b;padding:20px;">Загрузка данных...</div>';
         return;
     }
 
-    // Если графика нет — создаём
     if (!chartInstance) {
         container.innerHTML = '';
-
         chartInstance = LightweightCharts.createChart(container, {
             width: container.clientWidth || 600,
             height: container.clientHeight || 500,
-            layout: {
-                background: { color: '#0f172a' },
-                textColor: '#d1d5db',
-            },
-            grid: {
-                vertLines: { color: '#1e293b' },
-                horzLines: { color: '#1e293b' },
-            },
-            timeScale: {
-                timeVisible: true,
-                secondsVisible: false,
-                borderColor: '#1e293b',
-                fixLeftEdge: true,
-                fixRightEdge: true,
-            },
-            rightPriceScale: {
-                borderColor: '#1e293b',
-                scaleMargins: {
-                    top: 0.1,
-                    bottom: 0.1,
-                },
-            },
+            layout: { background: { color: '#0f172a' }, textColor: '#d1d5db' },
+            grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
+            timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#1e293b' },
+            rightPriceScale: { borderColor: '#1e293b', scaleMargins: { top: 0.1, bottom: 0.1 } },
         });
 
         candlestickSeries = chartInstance.addCandlestickSeries({
@@ -79,31 +57,29 @@ function drawCandleChart() {
             wickDownColor: '#ef4444',
         });
 
-        // Автоматическое обновление при ресайзе
         const resizeObserver = new ResizeObserver(() => {
             if (chartInstance && container) {
-                const width = container.clientWidth || 600;
-                const height = container.clientHeight || 500;
-                chartInstance.applyOptions({ width, height });
+                chartInstance.applyOptions({
+                    width: container.clientWidth || 600,
+                    height: container.clientHeight || 500,
+                });
             }
         });
         resizeObserver.observe(container);
         window._resizeObserver = resizeObserver;
-
         console.log('✅ График создан');
     }
 
-    // Обновляем данные
     candlestickSeries.setData(data);
     chartInstance.timeScale().fitContent();
 
-    // Обновляем счётчик свечей
     document.getElementById('candleCount').textContent = data.length;
     document.getElementById('timeframeLabel').textContent =
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval / 60) + 'ч';
 }
 
-// ===== ЗАГРУЗКА СВЕЧЕЙ =====
+// ===== ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений) =====
+
 async function loadMinuteCandles(instrument = 'RTS') {
     const candles = await fetchMinuteCandles(instrument);
     if (candles && candles.length > 10) {
@@ -112,7 +88,7 @@ async function loadMinuteCandles(instrument = 'RTS') {
     } else {
         const startPrice = instrument === 'RTS' ? 78000 : 88;
         STATE.minuteCandles[instrument] = generateTestCandles(200, startPrice, 1);
-        console.log(`📊 Используются тестовые 1м свечи (${instrument})`);
+        console.log(`📊 Тестовые 1м свечи (${instrument})`);
     }
     const minuteCandles = STATE.minuteCandles[instrument] || [];
     if (minuteCandles.length > 0) {
@@ -127,26 +103,21 @@ async function loadMinuteCandles(instrument = 'RTS') {
     drawCandleChart();
 }
 
-// ===== ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА =====
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
-
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
     document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
     document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
-
     if (STATE.minuteCandles[instrument].length === 0) {
         await loadMinuteCandles(instrument);
     }
     drawCandleChart();
 };
 
-// ===== ОБНОВЛЕНИЕ ТАЙМФРЕЙМА =====
 function updateTimeframe(interval) {
     STATE.interval = interval;
     const inst = STATE.currentInstrument || 'RTS';
     const minuteCandles = STATE.minuteCandles[inst] || [];
-
     if (minuteCandles.length > 0) {
         STATE.candles[inst] = interval === 1
             ? minuteCandles
@@ -158,7 +129,6 @@ function updateTimeframe(interval) {
     drawCandleChart();
 }
 
-// ===== НАСТРОЙКА УПРАВЛЕНИЯ (ГЛОБАЛЬНАЯ) =====
 function setupChartControls() {
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -170,43 +140,27 @@ function setupChartControls() {
     console.log('✅ Управление графиком настроено');
 }
 
-// ===== ВЕРТИКАЛЬНЫЙ ЗУМ =====
 document.addEventListener('DOMContentLoaded', function() {
-    const zoomInBtn = document.getElementById('zoomInV');
-    const zoomOutBtn = document.getElementById('zoomOutV');
-    const zoomResetBtn = document.getElementById('zoomResetV');
-
-    if (zoomInBtn) {
-        zoomInBtn.addEventListener('click', () => {
-            if (chartInstance) {
-                const priceScale = chartInstance.priceScale();
-                const currentScale = priceScale.scale();
-                priceScale.applyOptions({ scale: currentScale * 1.2 });
-            }
-        });
-    }
-
-    if (zoomOutBtn) {
-        zoomOutBtn.addEventListener('click', () => {
-            if (chartInstance) {
-                const priceScale = chartInstance.priceScale();
-                const currentScale = priceScale.scale();
-                priceScale.applyOptions({ scale: currentScale * 0.8 });
-            }
-        });
-    }
-
-    if (zoomResetBtn) {
-        zoomResetBtn.addEventListener('click', () => {
-            if (chartInstance) {
-                chartInstance.priceScale().applyOptions({ scale: 1 });
-                chartInstance.timeScale().fitContent();
-            }
-        });
-    }
+    document.getElementById('zoomInV')?.addEventListener('click', () => {
+        if (chartInstance) {
+            const s = chartInstance.priceScale().scale();
+            chartInstance.priceScale().applyOptions({ scale: s * 1.2 });
+        }
+    });
+    document.getElementById('zoomOutV')?.addEventListener('click', () => {
+        if (chartInstance) {
+            const s = chartInstance.priceScale().scale();
+            chartInstance.priceScale().applyOptions({ scale: s * 0.8 });
+        }
+    });
+    document.getElementById('zoomResetV')?.addEventListener('click', () => {
+        if (chartInstance) {
+            chartInstance.priceScale().applyOptions({ scale: 1 });
+            chartInstance.timeScale().fitContent();
+        }
+    });
 });
 
-// ===== УНИЧТОЖЕНИЕ ГРАФИКА =====
 window.destroyChart = function() {
     if (window._resizeObserver) {
         window._resizeObserver.disconnect();
@@ -218,15 +172,12 @@ window.destroyChart = function() {
         candlestickSeries = null;
     }
     const container = document.getElementById('chart-container');
-    if (container) {
-        container.innerHTML = '';
-    }
+    if (container) container.innerHTML = '';
 };
 
-// ===== ЭКСПОРТЫ В ГЛОБАЛЬНУЮ ОБЛАСТЬ =====
 window.drawCandleChart = drawCandleChart;
 window.loadMinuteCandles = loadMinuteCandles;
-window.setupChartControls = setupChartControls;   // ← ЯВНО ДОБАВЛЯЕМ В window
+window.setupChartControls = setupChartControls;
 window.updateTimeframe = updateTimeframe;
 
 console.log('📊 chart-loader.js загружен');
