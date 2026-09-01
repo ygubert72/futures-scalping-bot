@@ -8,7 +8,7 @@ let chartState = {
     dragStartOffset: 0,
 };
 
-// Глобальный центр графика (фиксируется при первом рисовании)
+// Глобальный центр графика (пересчитывается при смене таймфрейма/инструмента)
 let fixedChartCenter = null;
 
 function getOptimalCandleCount() {
@@ -96,26 +96,26 @@ function drawCandleChart() {
         return;
     }
 
-    // ========== 3. РАСЧЁТ ДИАПАЗОНА ЦЕН ==========
+    // ========== 3. РАСЧЁТ ЦЕНТРА И ДИАПАЗОНА ==========
     let min = Infinity, max = -Infinity;
     visible.forEach(c => {
         if (c.low < min) min = c.low;
         if (c.high > max) max = c.high;
     });
     
-    // Если центр ещё не зафиксирован — фиксируем
+    // Если центр ещё не зафиксирован — фиксируем на основе текущих данных
     if (fixedChartCenter === null) {
         fixedChartCenter = (max + min) / 2;
-        console.log('📌 Центр графика зафиксирован:', fixedChartCenter);
+        console.log(`📌 Центр зафиксирован для ${inst} (${STATE.interval}м):`, fixedChartCenter);
     }
     
+    // Диапазон цен
     const range = max - min || 1;
     const minRange = inst === 'RTS' ? 50 : 0.5;
     const finalRange = Math.max(range, minRange);
     
     // ========== 4. ВЕРТИКАЛЬНЫЙ ЗУМ (ОТНОСИТЕЛЬНО ФИКСИРОВАННОГО ЦЕНТРА) ==========
     const verticalZoom = STATE.verticalZoom || 1;
-    // Половина диапазона с учётом зума
     const halfRange = (finalRange * 0.6) / verticalZoom;
     
     // Границы строго относительно зафиксированного центра
@@ -238,6 +238,18 @@ function drawCandleChart() {
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
 }
 
+// ============================================================
+//  ФУНКЦИЯ ДЛЯ ПРИНУДИТЕЛЬНОГО СБРОСА ЦЕНТРА
+// ============================================================
+function resetChartCenter() {
+    fixedChartCenter = null;
+    STATE.verticalZoom = 1;
+    STATE.zoomLevel = 1;
+    STATE.offset = 0;
+    console.log('🔄 Центр графика сброшен');
+    drawCandleChart();
+}
+
 function setupChartControls() {
     const canvas = document.getElementById('candleChart');
     if (!canvas) return;
@@ -281,17 +293,18 @@ function setupChartControls() {
         }
     });
     
+    // ===== ПЕРЕКЛЮЧЕНИЕ ТАЙМФРЕЙМОВ =====
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', function() {
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            STATE.interval = parseInt(btn.dataset.interval);
+            this.classList.add('active');
+            STATE.interval = parseInt(this.dataset.interval);
+            
+            // ПРИНУДИТЕЛЬНО СБРАСЫВАЕМ ЦЕНТР ПРИ СМЕНЕ ТАЙМФРЕЙМА
+            fixedChartCenter = null;
             STATE.zoomLevel = 1;
             STATE.verticalZoom = 1;
             STATE.offset = 0;
-            
-            // Сбрасываем зафиксированный центр при смене таймфрейма
-            fixedChartCenter = null;
             
             const inst = STATE.currentInstrument || 'RTS';
             const minuteCandles = STATE.minuteCandles[inst] || [];
@@ -309,6 +322,7 @@ function setupChartControls() {
         });
     });
     
+    // ===== ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) =====
     document.getElementById('zoomInV').addEventListener('click', () => {
         STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
         drawCandleChart();
@@ -317,21 +331,17 @@ function setupChartControls() {
         STATE.verticalZoom = Math.max(0.2, (STATE.verticalZoom || 1) - 0.25);
         drawCandleChart();
     });
-    document.getElementById('zoomResetV').addEventListener('click', () => {
-        STATE.verticalZoom = 1;
-        fixedChartCenter = null; // Сбрасываем центр при сбросе зума
-        drawCandleChart();
-    });
+    document.getElementById('zoomResetV').addEventListener('click', resetChartCenter);
 }
 
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
+    
+    // ПРИНУДИТЕЛЬНО СБРАСЫВАЕМ ЦЕНТР ПРИ СМЕНЕ ИНСТРУМЕНТА
+    fixedChartCenter = null;
     STATE.zoomLevel = 1;
     STATE.verticalZoom = 1;
     STATE.offset = 0;
-    
-    // Сбрасываем центр при смене инструмента
-    fixedChartCenter = null;
     
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
     document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
