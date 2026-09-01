@@ -2,7 +2,7 @@
 //  ЗАПУСК ПРИЛОЖЕНИЯ
 // ============================================================
 
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', async () => {.
     console.log('🔍 Определение актуальных фьючерсов...');
     await detectInstrumentCodes();
     console.log('📊 Используемые коды:', INSTRUMENT_CODES);
