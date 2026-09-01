@@ -8,8 +8,8 @@ let chartState = {
     dragStartOffset: 0,
 };
 
-// Глобальный центр графика (доступен через window для отладки)
-window.fixedChartCenter = null;
+// Просто храним последний вычисленный центр
+let lastCenter = null;
 
 function getOptimalCandleCount() {
     const container = document.getElementById('chart-container');
@@ -71,12 +71,12 @@ function drawCandleChart() {
         return;
     }
 
-    // ========== 1. РАСЧЁТ КОЛИЧЕСТВА ВИДИМЫХ СВЕЧЕЙ ==========
+    // Количество видимых свечей
     const baseCandles = getOptimalCandleCount();
     let visibleCandles = Math.floor(baseCandles / STATE.zoomLevel);
     visibleCandles = Math.max(10, Math.min(candles.length, visibleCandles));
     
-    // ========== 2. РАСЧЁТ ИНДЕКСОВ С УЧЁТОМ OFFSET ==========
+    // Индексы с учётом offset
     let startIdx = Math.max(0, candles.length - visibleCandles - STATE.offset);
     let endIdx = Math.min(candles.length, startIdx + visibleCandles);
     
@@ -96,47 +96,32 @@ function drawCandleChart() {
         return;
     }
 
-    // ========== 3. РАСЧЁТ ЦЕНТРА И ДИАПАЗОНА ==========
+    // ===== ВЫЧИСЛЯЕМ ЦЕНТР =====
     let min = Infinity, max = -Infinity;
     visible.forEach(c => {
         if (c.low < min) min = c.low;
         if (c.high > max) max = c.high;
     });
     
-    // ПРИНУДИТЕЛЬНО пересчитываем центр на основе ТЕКУЩИХ видимых свечей
-    const newCenter = (max + min) / 2;
-    
-    // Если центр ещё не зафиксирован или был сброшен — фиксируем
-    if (window.fixedChartCenter === null || window.fixedChartCenter === undefined) {
-        window.fixedChartCenter = newCenter;
-        console.log(`📌 Центр зафиксирован для ${inst} (${STATE.interval}м):`, window.fixedChartCenter);
-    } else {
-        // Если центр уже есть, но график уехал — принудительно обновляем
-        const diff = Math.abs(newCenter - window.fixedChartCenter);
-        if (diff > 5) { // Если разница больше 5 пунктов — обновляем центр
-            window.fixedChartCenter = newCenter;
-            console.log(`🔄 Центр обновлён для ${inst} (${STATE.interval}м):`, window.fixedChartCenter);
-        }
+    // Если центр не задан или был сброшен — вычисляем заново
+    if (lastCenter === null) {
+        lastCenter = (max + min) / 2;
+        console.log(`📌 Центр: ${lastCenter.toFixed(2)} (${inst}, ${STATE.interval}м)`);
     }
     
-    // Диапазон цен
-    const range = max - min || 1;
-    const minRange = inst === 'RTS' ? 50 : 0.5;
-    const finalRange = Math.max(range, minRange);
+    // Диапазон цен с минимальным запасом
+    const range = Math.max(max - min, inst === 'RTS' ? 50 : 0.5);
+    const halfRange = (range * 0.6) / (STATE.verticalZoom || 1);
     
-    // ========== 4. ВЕРТИКАЛЬНЫЙ ЗУМ (ОТНОСИТЕЛЬНО ФИКСИРОВАННОГО ЦЕНТРА) ==========
-    const verticalZoom = STATE.verticalZoom || 1;
-    const halfRange = (finalRange * 0.6) / verticalZoom;
-    
-    // Границы строго относительно зафиксированного центра
-    let priceMin = window.fixedChartCenter - halfRange;
-    let priceMax = window.fixedChartCenter + halfRange;
+    // Границы относительно центра
+    let priceMin = lastCenter - halfRange;
+    let priceMax = lastCenter + halfRange;
     
     const padding = (priceMax - priceMin) * 0.05;
     priceMin -= padding;
     priceMax += padding;
 
-    // ========== 5. СЕТКА ==========
+    // ===== СЕТКА =====
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= 4; i++) {
@@ -153,12 +138,11 @@ function drawCandleChart() {
         ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
     }
 
-    // ========== 6. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ ==========
-    let candleWidth = (chartW / visible.length) * 0.75;
-    candleWidth = Math.max(4, Math.min(20, candleWidth));
+    // ===== ШИРИНА СВЕЧЕЙ =====
+    let candleWidth = Math.max(4, Math.min(20, (chartW / visible.length) * 0.75));
     const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
     
-    // ========== 7. РИСОВАНИЕ СВЕЧЕЙ ==========
+    // ===== РИСУЕМ СВЕЧИ =====
     visible.forEach((c, i) => {
         const x = pad.left + (i / visible.length) * chartW + gap/2;
         const yHigh = pad.top + chartH - ((c.high - priceMin) / (priceMax - priceMin)) * chartH;
@@ -171,19 +155,17 @@ function drawCandleChart() {
         ctx.strokeStyle = isGreen ? '#22c55e' : '#ef4444';
         ctx.lineWidth = 1;
         
-        // Тень
         ctx.beginPath();
         ctx.moveTo(x + candleWidth/2, yHigh);
         ctx.lineTo(x + candleWidth/2, yLow);
         ctx.stroke();
         
-        // Тело
         const bodyY = Math.min(yOpen, yClose);
         const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
         ctx.fillRect(x, bodyY, candleWidth, bodyH);
     });
 
-    // ========== 8. МЕТКИ СДЕЛОК ==========
+    // ===== МЕТКИ СДЕЛОК =====
     STATE.trades.forEach(t => {
         if (t.instrument !== inst) return;
         
@@ -220,7 +202,7 @@ function drawCandleChart() {
         ctx.fill();
     });
 
-    // ========== 9. ПОСЛЕДНЯЯ ЦЕНА ==========
+    // ===== ПОСЛЕДНЯЯ ЦЕНА =====
     if (visible.length > 0) {
         const last = visible[visible.length-1];
         const lastY = pad.top + chartH - ((last.close - priceMin) / (priceMax - priceMin)) * chartH;
@@ -230,7 +212,7 @@ function drawCandleChart() {
         ctx.fillText(last.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
     }
 
-    // ========== 10. ВРЕМЕНА ==========
+    // ===== ВРЕМЕНА =====
     ctx.fillStyle = '#64748b';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'center';
@@ -248,18 +230,14 @@ function drawCandleChart() {
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
 }
 
-// ============================================================
-//  ФУНКЦИЯ ДЛЯ ПРИНУДИТЕЛЬНОГО СБРОСА ЦЕНТРА
-// ============================================================
+// ===== СБРОС ЦЕНТРА =====
 function resetChartCenter() {
-    window.fixedChartCenter = null;
+    lastCenter = null;
     STATE.verticalZoom = 1;
     STATE.zoomLevel = 1;
     STATE.offset = 0;
-    console.log('🔄 Центр графика сброшен');
     drawCandleChart();
 }
-window.resetChartCenter = resetChartCenter;
 
 function setupChartControls() {
     const canvas = document.getElementById('candleChart');
@@ -268,16 +246,12 @@ function setupChartControls() {
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         if (e.ctrlKey || e.metaKey) {
-            // Вертикальный зум
             const delta = e.deltaY > 0 ? -0.15 : 0.15;
-            const newZoom = (STATE.verticalZoom || 1) + delta;
-            STATE.verticalZoom = Math.max(0.2, Math.min(10, newZoom));
+            STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
             drawCandleChart();
         } else {
-            // Горизонтальный зум
             const delta = e.deltaY > 0 ? -0.15 : 0.15;
-            const newZoom = STATE.zoomLevel + delta;
-            STATE.zoomLevel = Math.max(0.1, Math.min(10, newZoom));
+            STATE.zoomLevel = Math.max(0.1, Math.min(10, STATE.zoomLevel + delta));
             drawCandleChart();
         }
     }, { passive: false });
@@ -292,8 +266,7 @@ function setupChartControls() {
     window.addEventListener('mousemove', (e) => {
         if (!chartState.isDragging) return;
         const dx = e.clientX - chartState.dragStartX;
-        const dragOffset = Math.round(dx / 2);
-        STATE.offset = Math.max(0, chartState.dragStartOffset - dragOffset);
+        STATE.offset = Math.max(0, chartState.dragStartOffset - Math.round(dx / 2));
         drawCandleChart();
     });
     
@@ -309,32 +282,32 @@ function setupChartControls() {
         btn.addEventListener('click', function() {
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
+            
+            // МЕНЯЕМ ТАЙМФРЕЙМ
             STATE.interval = parseInt(this.dataset.interval);
             
-            // ПРИНУДИТЕЛЬНО СБРАСЫВАЕМ ЦЕНТР ПРИ СМЕНЕ ТАЙМФРЕЙМА
-            window.fixedChartCenter = null;
+            // СБРАСЫВАЕМ ЦЕНТР И ЗУМЫ
+            lastCenter = null;
             STATE.zoomLevel = 1;
             STATE.verticalZoom = 1;
             STATE.offset = 0;
             
+            // ПЕРЕСЧИТЫВАЕМ СВЕЧИ
             const inst = STATE.currentInstrument || 'RTS';
             const minuteCandles = STATE.minuteCandles[inst] || [];
             if (minuteCandles.length > 0) {
-                if (STATE.interval === 1) {
-                    STATE.candles[inst] = minuteCandles;
-                } else {
-                    STATE.candles[inst] = aggregateCandles(minuteCandles, STATE.interval);
-                }
+                STATE.candles[inst] = STATE.interval === 1 
+                    ? minuteCandles 
+                    : aggregateCandles(minuteCandles, STATE.interval);
                 if (STATE.candles[inst].length > STATE.maxCandles) {
                     STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
                 }
             }
-            // Принудительно перерисовываем с новым центром
+            // ПЕРЕРИСОВЫВАЕМ
             drawCandleChart();
         });
     });
     
-    // ===== ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) =====
     document.getElementById('zoomInV').addEventListener('click', () => {
         STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
         drawCandleChart();
@@ -346,11 +319,10 @@ function setupChartControls() {
     document.getElementById('zoomResetV').addEventListener('click', resetChartCenter);
 }
 
+// ===== ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА =====
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
-    
-    // ПРИНУДИТЕЛЬНО СБРАСЫВАЕМ ЦЕНТР ПРИ СМЕНЕ ИНСТРУМЕНТА
-    window.fixedChartCenter = null;
+    lastCenter = null;
     STATE.zoomLevel = 1;
     STATE.verticalZoom = 1;
     STATE.offset = 0;
@@ -364,11 +336,9 @@ window.switchInstrument = async function(instrument) {
     }
     const minuteCandles = STATE.minuteCandles[instrument] || [];
     if (minuteCandles.length > 0) {
-        if (STATE.interval === 1) {
-            STATE.candles[instrument] = minuteCandles;
-        } else {
-            STATE.candles[instrument] = aggregateCandles(minuteCandles, STATE.interval);
-        }
+        STATE.candles[instrument] = STATE.interval === 1 
+            ? minuteCandles 
+            : aggregateCandles(minuteCandles, STATE.interval);
         if (STATE.candles[instrument].length > STATE.maxCandles) {
             STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
         }
@@ -388,11 +358,9 @@ async function loadMinuteCandles(instrument = 'RTS') {
     }
     const minuteCandles = STATE.minuteCandles[instrument] || [];
     if (minuteCandles.length > 0) {
-        if (STATE.interval === 1) {
-            STATE.candles[instrument] = minuteCandles;
-        } else {
-            STATE.candles[instrument] = aggregateCandles(minuteCandles, STATE.interval);
-        }
+        STATE.candles[instrument] = STATE.interval === 1 
+            ? minuteCandles 
+            : aggregateCandles(minuteCandles, STATE.interval);
         if (STATE.candles[instrument].length > STATE.maxCandles) {
             STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
         }
