@@ -8,7 +8,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('📊 Используемые коды:', INSTRUMENT_CODES);
     
     // Настраиваем управление графиком (кнопки таймфреймов)
-    setupChartControls();
+    if (typeof setupChartControls === 'function') {
+        setupChartControls();
+        console.log('✅ setupChartControls вызван');
+    } else {
+        console.warn('⚠️ setupChartControls не определён');
+    }
     
     // Загружаем свечи для RTS
     await loadMinuteCandles('RTS');
