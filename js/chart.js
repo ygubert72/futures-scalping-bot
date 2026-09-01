@@ -1,5 +1,5 @@
 // ============================================================
-//  ГРАФИК (ОТРИСОВКА, ЗУМ, ДРАГ)
+//  ГРАФИК (ПРОСТОЕ РЕШЕНИЕ БЕЗ ФИКСАЦИИ ЦЕНТРА)
 // ============================================================
 
 let chartState = {
@@ -7,9 +7,6 @@ let chartState = {
     dragStartX: 0,
     dragStartOffset: 0,
 };
-
-// Просто храним последний вычисленный центр
-let lastCenter = null;
 
 function getOptimalCandleCount() {
     const container = document.getElementById('chart-container');
@@ -71,12 +68,12 @@ function drawCandleChart() {
         return;
     }
 
-    // Количество видимых свечей
+    // ===== 1. СКОЛЬКО СВЕЧЕЙ ПОКАЗЫВАТЬ =====
     const baseCandles = getOptimalCandleCount();
     let visibleCandles = Math.floor(baseCandles / STATE.zoomLevel);
     visibleCandles = Math.max(10, Math.min(candles.length, visibleCandles));
     
-    // Индексы с учётом offset
+    // ===== 2. КАКИЕ СВЕЧИ ПОКАЗЫВАТЬ =====
     let startIdx = Math.max(0, candles.length - visibleCandles - STATE.offset);
     let endIdx = Math.min(candles.length, startIdx + visibleCandles);
     
@@ -96,32 +93,32 @@ function drawCandleChart() {
         return;
     }
 
-    // ===== ВЫЧИСЛЯЕМ ЦЕНТР =====
+    // ===== 3. МАКСИМУМ И МИНИМУМ ЦЕН =====
     let min = Infinity, max = -Infinity;
     visible.forEach(c => {
         if (c.low < min) min = c.low;
         if (c.high > max) max = c.high;
     });
     
-    // Если центр не задан или был сброшен — вычисляем заново
-    if (lastCenter === null) {
-        lastCenter = (max + min) / 2;
-        console.log(`📌 Центр: ${lastCenter.toFixed(2)} (${inst}, ${STATE.interval}м)`);
-    }
+    // Минимальный диапазон для RTS и Si
+    const minRange = inst === 'RTS' ? 50 : 0.5;
+    const range = Math.max(max - min, minRange);
     
-    // Диапазон цен с минимальным запасом
-    const range = Math.max(max - min, inst === 'RTS' ? 50 : 0.5);
-    const halfRange = (range * 0.6) / (STATE.verticalZoom || 1);
+    // ВЕРТИКАЛЬНЫЙ ЗУМ
+    const verticalZoom = STATE.verticalZoom || 1;
+    const halfRange = (range * 0.6) / verticalZoom;
     
-    // Границы относительно центра
-    let priceMin = lastCenter - halfRange;
-    let priceMax = lastCenter + halfRange;
+    // ЦЕНТР - просто середина между максимумом и минимумом
+    const center = (max + min) / 2;
+    
+    let priceMin = center - halfRange;
+    let priceMax = center + halfRange;
     
     const padding = (priceMax - priceMin) * 0.05;
     priceMin -= padding;
     priceMax += padding;
 
-    // ===== СЕТКА =====
+    // ===== 4. СЕТКА =====
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= 4; i++) {
@@ -138,11 +135,11 @@ function drawCandleChart() {
         ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
     }
 
-    // ===== ШИРИНА СВЕЧЕЙ =====
+    // ===== 5. ШИРИНА СВЕЧЕЙ =====
     let candleWidth = Math.max(4, Math.min(20, (chartW / visible.length) * 0.75));
     const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
     
-    // ===== РИСУЕМ СВЕЧИ =====
+    // ===== 6. РИСУЕМ СВЕЧИ =====
     visible.forEach((c, i) => {
         const x = pad.left + (i / visible.length) * chartW + gap/2;
         const yHigh = pad.top + chartH - ((c.high - priceMin) / (priceMax - priceMin)) * chartH;
@@ -165,7 +162,7 @@ function drawCandleChart() {
         ctx.fillRect(x, bodyY, candleWidth, bodyH);
     });
 
-    // ===== МЕТКИ СДЕЛОК =====
+    // ===== 7. МЕТКИ СДЕЛОК =====
     STATE.trades.forEach(t => {
         if (t.instrument !== inst) return;
         
@@ -202,7 +199,7 @@ function drawCandleChart() {
         ctx.fill();
     });
 
-    // ===== ПОСЛЕДНЯЯ ЦЕНА =====
+    // ===== 8. ПОСЛЕДНЯЯ ЦЕНА =====
     if (visible.length > 0) {
         const last = visible[visible.length-1];
         const lastY = pad.top + chartH - ((last.close - priceMin) / (priceMax - priceMin)) * chartH;
@@ -212,7 +209,7 @@ function drawCandleChart() {
         ctx.fillText(last.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
     }
 
-    // ===== ВРЕМЕНА =====
+    // ===== 9. ВРЕМЕНА =====
     ctx.fillStyle = '#64748b';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'center';
@@ -228,15 +225,6 @@ function drawCandleChart() {
     document.getElementById('candleCount').textContent = visible.length;
     document.getElementById('timeframeLabel').textContent = 
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval/60) + 'ч';
-}
-
-// ===== СБРОС ЦЕНТРА =====
-function resetChartCenter() {
-    lastCenter = null;
-    STATE.verticalZoom = 1;
-    STATE.zoomLevel = 1;
-    STATE.offset = 0;
-    drawCandleChart();
 }
 
 function setupChartControls() {
@@ -283,16 +271,11 @@ function setupChartControls() {
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             
-            // МЕНЯЕМ ТАЙМФРЕЙМ
             STATE.interval = parseInt(this.dataset.interval);
-            
-            // СБРАСЫВАЕМ ЦЕНТР И ЗУМЫ
-            lastCenter = null;
             STATE.zoomLevel = 1;
             STATE.verticalZoom = 1;
             STATE.offset = 0;
             
-            // ПЕРЕСЧИТЫВАЕМ СВЕЧИ
             const inst = STATE.currentInstrument || 'RTS';
             const minuteCandles = STATE.minuteCandles[inst] || [];
             if (minuteCandles.length > 0) {
@@ -303,7 +286,6 @@ function setupChartControls() {
                     STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
                 }
             }
-            // ПЕРЕРИСОВЫВАЕМ
             drawCandleChart();
         });
     });
@@ -316,13 +298,16 @@ function setupChartControls() {
         STATE.verticalZoom = Math.max(0.2, (STATE.verticalZoom || 1) - 0.25);
         drawCandleChart();
     });
-    document.getElementById('zoomResetV').addEventListener('click', resetChartCenter);
+    document.getElementById('zoomResetV').addEventListener('click', () => {
+        STATE.verticalZoom = 1;
+        STATE.zoomLevel = 1;
+        STATE.offset = 0;
+        drawCandleChart();
+    });
 }
 
-// ===== ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА =====
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
-    lastCenter = null;
     STATE.zoomLevel = 1;
     STATE.verticalZoom = 1;
     STATE.offset = 0;
