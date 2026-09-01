@@ -8,6 +8,9 @@ let chartState = {
     dragStartOffset: 0,
 };
 
+// Глобальный центр графика (фиксируется при первом рисовании)
+let fixedChartCenter = null;
+
 function getOptimalCandleCount() {
     const container = document.getElementById('chart-container');
     if (!container) return 60;
@@ -100,25 +103,24 @@ function drawCandleChart() {
         if (c.high > max) max = c.high;
     });
     
-    const range = max - min || 1;
+    // Если центр ещё не зафиксирован — фиксируем
+    if (fixedChartCenter === null) {
+        fixedChartCenter = (max + min) / 2;
+        console.log('📌 Центр графика зафиксирован:', fixedChartCenter);
+    }
     
-    // ⚠️ МИНИМАЛЬНЫЙ ДИАПАЗОН ДЛЯ ВЫСОТЫ СВЕЧЕЙ
-    // Если диапазон слишком маленький, растягиваем его
-    const minRange = inst === 'RTS' ? 50 : 0.5;  // RTS: минимум 50 пунктов, Si: минимум 0.5 пункта
+    const range = max - min || 1;
+    const minRange = inst === 'RTS' ? 50 : 0.5;
     const finalRange = Math.max(range, minRange);
     
-    // Центр графика
-    const center = (max + min) / 2;
-    const halfRange = finalRange * 0.6;
-    
-    let priceMin = center - halfRange;
-    let priceMax = center + halfRange;
-    
-    // ========== 4. ВЕРТИКАЛЬНЫЙ ЗУМ (с сохранением центра) ==========
+    // ========== 4. ВЕРТИКАЛЬНЫЙ ЗУМ (ОТНОСИТЕЛЬНО ФИКСИРОВАННОГО ЦЕНТРА) ==========
     const verticalZoom = STATE.verticalZoom || 1;
-    const zoomedRange = (priceMax - priceMin) / verticalZoom;
-    priceMin = center - zoomedRange / 2;
-    priceMax = center + zoomedRange / 2;
+    // Половина диапазона с учётом зума
+    const halfRange = (finalRange * 0.6) / verticalZoom;
+    
+    // Границы строго относительно зафиксированного центра
+    let priceMin = fixedChartCenter - halfRange;
+    let priceMax = fixedChartCenter + halfRange;
     
     const padding = (priceMax - priceMin) * 0.05;
     priceMin -= padding;
@@ -288,6 +290,9 @@ function setupChartControls() {
             STATE.verticalZoom = 1;
             STATE.offset = 0;
             
+            // Сбрасываем зафиксированный центр при смене таймфрейма
+            fixedChartCenter = null;
+            
             const inst = STATE.currentInstrument || 'RTS';
             const minuteCandles = STATE.minuteCandles[inst] || [];
             if (minuteCandles.length > 0) {
@@ -314,6 +319,7 @@ function setupChartControls() {
     });
     document.getElementById('zoomResetV').addEventListener('click', () => {
         STATE.verticalZoom = 1;
+        fixedChartCenter = null; // Сбрасываем центр при сбросе зума
         drawCandleChart();
     });
 }
@@ -323,6 +329,9 @@ window.switchInstrument = async function(instrument) {
     STATE.zoomLevel = 1;
     STATE.verticalZoom = 1;
     STATE.offset = 0;
+    
+    // Сбрасываем центр при смене инструмента
+    fixedChartCenter = null;
     
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
     document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
