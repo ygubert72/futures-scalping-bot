@@ -246,10 +246,8 @@
             candles: { RTS: [], Si: [] },
             visibleCandles: [],
             interval: 1,
-            visibleCount: 60,
-            zoomLevel: 1,
-            zoomMin: 0.03,
-            zoomMax: 50,
+            maxCandles: 300,        // Максимальное количество свечей
+            zoomLevel: 1,           // 1 = норма, >1 = приближение, <1 = отдаление
             offset: 0,
             verticalZoom: 1,
             currentInstrument: 'RTS',
@@ -262,7 +260,7 @@
             const container = document.getElementById('chart-container');
             if (!container) return 60;
             const width = container.getBoundingClientRect().width;
-            return Math.max(20, Math.floor(width / 12));
+            return Math.max(20, Math.floor(width / 10));
         }
 
         // ============================================================
@@ -274,7 +272,8 @@
             const step = targetInterval;
             for (let i = 0; i < minuteCandles.length; i += step) {
                 const group = minuteCandles.slice(i, i + step);
-                if (group.length < step && i + step < minuteCandles.length) continue;
+                if (group.length === 0) continue;
+                // Для последней группы, если она неполная — добавляем как есть
                 result.push({
                     time: group[0].time,
                     open: group[0].open,
@@ -296,7 +295,7 @@
                 
                 const now = new Date();
                 const from = new Date(now);
-                from.setDate(from.getDate() - 30); // 30 дней
+                from.setDate(from.getDate() - 30);
                 
                 const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
                 const params = new URLSearchParams({
@@ -351,7 +350,6 @@
             STATE.currentInstrument = instrument;
             STATE.zoomLevel = 1;
             STATE.offset = 0;
-            STATE.visibleCount = getOptimalCandleCount();
             
             document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
             document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
@@ -392,6 +390,10 @@
             } else {
                 STATE.candles[inst] = aggregateCandles(minuteCandles, interval);
             }
+            // Ограничиваем количество свечей для производительности
+            if (STATE.candles[inst].length > STATE.maxCandles) {
+                STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
+            }
             console.log(`📊 Агрегировано ${STATE.candles[inst].length} свечей (${interval}м)`);
         }
 
@@ -423,7 +425,7 @@
         }
 
         // ============================================================
-        //  ГРАФИК (С ИСПРАВЛЕННЫМ ЗУМОМ И ДРАГОМ)
+        //  ГРАФИК — ИСПРАВЛЕННАЯ ВЕРСИЯ
         // ============================================================
         let chartState = {
             isDragging: false,
@@ -465,22 +467,24 @@
                 ctx.fillText('Загрузка данных...', W/2, H/2);
                 return;
             }
+
+            // ========== 1. РАСЧЁТ КОЛИЧЕСТВА ВИДИМЫХ СВЕЧЕЙ ==========
+            // Базовое количество свечей, которое помещается на экране
+            const baseCandles = getOptimalCandleCount();
             
-            // ✅ ПРАВИЛЬНЫЙ РАСЧЁТ visibleCount
-            let visibleCount = STATE.visibleCount;
-            if (STATE.zoomLevel > 1) {
-                visibleCount = Math.floor(STATE.visibleCount / STATE.zoomLevel);
-            } else {
-                visibleCount = Math.floor(STATE.visibleCount * STATE.zoomLevel);
-            }
-            visibleCount = Math.max(10, visibleCount);
+            // Корректируем с учётом зума:
+            // zoomLevel > 1 — приближаем (показываем меньше свечей)
+            // zoomLevel < 1 — отдаляем (показываем больше свечей)
+            let visibleCandles = Math.floor(baseCandles / STATE.zoomLevel);
+            visibleCandles = Math.max(10, Math.min(candles.length, visibleCandles));
             
-            // ✅ ПРАВИЛЬНЫЙ РАСЧЁТ startIdx С УЧЁТОМ offset
-            let startIdx = Math.max(0, candles.length - visibleCount - STATE.offset);
-            let endIdx = Math.min(candles.length, startIdx + visibleCount);
+            // ========== 2. РАСЧЁТ ИНДЕКСОВ С УЧЁТОМ OFFSET ==========
+            let startIdx = Math.max(0, candles.length - visibleCandles - STATE.offset);
+            let endIdx = Math.min(candles.length, startIdx + visibleCandles);
             
-            if (endIdx - startIdx < 2) {
-                startIdx = Math.max(0, candles.length - visibleCount);
+            // Если мы в конце массива, корректируем
+            if (endIdx - startIdx < visibleCandles) {
+                startIdx = Math.max(0, candles.length - visibleCandles);
                 endIdx = candles.length;
             }
             
@@ -494,7 +498,8 @@
                 ctx.fillText('Недостаточно данных', W/2, H/2);
                 return;
             }
-            
+
+            // ========== 3. РАСЧЁТ ДИАПАЗОНА ЦЕН ==========
             let min = Infinity, max = -Infinity;
             visible.forEach(c => {
                 if (c.low < min) min = c.low;
@@ -510,6 +515,7 @@
             min = center - halfRange;
             max = center + halfRange;
             
+            // Вертикальный зум
             const verticalZoom = STATE.verticalZoom || 1;
             const zoomedRange = (max - min) / verticalZoom;
             const zoomCenter = (max + min) / 2;
@@ -519,7 +525,8 @@
             const padding = (max - min) * 0.05;
             min -= padding;
             max += padding;
-            
+
+            // ========== 4. СЕТКА ==========
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 0.5;
             for (let i = 0; i <= 4; i++) {
@@ -535,10 +542,12 @@
                 ctx.textAlign = 'right';
                 ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
             }
-            
+
+            // ========== 5. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ (АДАПТИВНАЯ) ==========
             const candleWidth = Math.max(2, Math.min((chartW / visible.length) * 0.7, 20));
             const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
             
+            // ========== 6. РИСОВАНИЕ СВЕЧЕЙ ==========
             visible.forEach((c, i) => {
                 const x = pad.left + (i / visible.length) * chartW + gap/2;
                 const yHigh = pad.top + chartH - ((c.high - min) / (max - min)) * chartH;
@@ -551,16 +560,19 @@
                 ctx.strokeStyle = isGreen ? '#22c55e' : '#ef4444';
                 ctx.lineWidth = 1;
                 
+                // Тень
                 ctx.beginPath();
                 ctx.moveTo(x + candleWidth/2, yHigh);
                 ctx.lineTo(x + candleWidth/2, yLow);
                 ctx.stroke();
                 
+                // Тело
                 const bodyY = Math.min(yOpen, yClose);
                 const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
                 ctx.fillRect(x, bodyY, candleWidth, bodyH);
             });
-            
+
+            // ========== 7. МЕТКИ СДЕЛОК ==========
             STATE.trades.forEach(t => {
                 if (t.instrument !== inst) return;
                 
@@ -576,7 +588,7 @@
                     }
                 });
                 
-                if (candleIdx === -1 || minDiff > 60000) return;
+                if (candleIdx === -1 || minDiff > 60000 * STATE.interval) return;
                 
                 const c = visible[candleIdx];
                 const x = pad.left + (candleIdx / visible.length) * chartW + candleWidth/2;
@@ -596,7 +608,8 @@
                 ctx.closePath();
                 ctx.fill();
             });
-            
+
+            // ========== 8. ПОСЛЕДНЯЯ ЦЕНА ==========
             if (visible.length > 0) {
                 const last = visible[visible.length-1];
                 const lastY = pad.top + chartH - ((last.close - min) / (max - min)) * chartH;
@@ -605,7 +618,8 @@
                 ctx.textAlign = 'left';
                 ctx.fillText(last.close.toFixed(2), pad.left + chartW - 60, lastY - 8);
             }
-            
+
+            // ========== 9. ВРЕМЕНА ==========
             ctx.fillStyle = '#64748b';
             ctx.font = '9px sans-serif';
             ctx.textAlign = 'center';
@@ -630,20 +644,26 @@
             const canvas = document.getElementById('candleChart');
             if (!canvas) return;
             
+            // ===== ГОРИЗОНТАЛЬНЫЙ ЗУМ (колёсико) =====
             canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 
                 if (e.ctrlKey || e.metaKey) {
+                    // Вертикальный зум
                     const delta = e.deltaY > 0 ? -0.1 : 0.1;
                     STATE.verticalZoom = Math.max(0.2, Math.min(10, (STATE.verticalZoom || 1) + delta));
                     drawCandleChart();
                 } else {
+                    // Горизонтальный зум
                     const delta = e.deltaY > 0 ? -0.15 : 0.15;
-                    STATE.zoomLevel = Math.max(STATE.zoomMin, Math.min(STATE.zoomMax, STATE.zoomLevel + delta));
+                    const newZoom = STATE.zoomLevel + delta;
+                    // Ограничиваем зум: 0.1x — 10x
+                    STATE.zoomLevel = Math.max(0.1, Math.min(10, newZoom));
                     drawCandleChart();
                 }
             }, { passive: false });
             
+            // ===== ДРАГ (перетаскивание) =====
             canvas.addEventListener('mousedown', (e) => {
                 chartState.isDragging = true;
                 chartState.dragStartX = e.clientX;
@@ -654,7 +674,7 @@
             window.addEventListener('mousemove', (e) => {
                 if (!chartState.isDragging) return;
                 const dx = e.clientX - chartState.dragStartX;
-                const dragOffset = Math.round(dx / 3);
+                const dragOffset = Math.round(dx / 2);
                 STATE.offset = Math.max(0, chartState.dragStartOffset - dragOffset);
                 drawCandleChart();
             });
@@ -666,6 +686,7 @@
                 }
             });
             
+            // ===== ПЕРЕКЛЮЧЕНИЕ ТАЙМФРЕЙМОВ =====
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
@@ -674,12 +695,12 @@
                     STATE.zoomLevel = 1;
                     STATE.verticalZoom = 1;
                     STATE.offset = 0;
-                    STATE.visibleCount = getOptimalCandleCount();
                     updateCandlesForInterval();
                     drawCandleChart();
                 });
             });
             
+            // ===== ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) =====
             document.getElementById('zoomInV').addEventListener('click', () => {
                 STATE.verticalZoom = Math.min(10, (STATE.verticalZoom || 1) + 0.25);
                 drawCandleChart();
@@ -973,9 +994,6 @@
         //  ИНИЦИАЛИЗАЦИЯ
         // ============================================================
         document.addEventListener('DOMContentLoaded', async () => {
-            STATE.visibleCount = getOptimalCandleCount();
-            STATE.zoomLevel = 1;
-            
             console.log('🔍 Определение актуальных фьючерсов...');
             await detectInstrumentCodes();
             
@@ -995,52 +1013,105 @@
             document.getElementById('exportBtn').addEventListener('click', exportToExcel);
             
             window.addEventListener('resize', () => {
-                STATE.visibleCount = getOptimalCandleCount();
                 drawCandleChart();
             });
         });
     </script>
-<script type="module">
-  // ============================================================
-  //  FIREBASE НАСТРОЙКА
-  // ============================================================
-  
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getDatabase, ref, push, set, get } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+    
+    <script type="module">
+        // ============================================================
+        //  FIREBASE НАСТРОЙКА
+        // ============================================================
+        
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+        import { getDatabase, ref, push, set, get } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDaHs-CLoLaAfBDMsTL35DfjhtLryAkaB0",
-    authDomain: "futures-scalping-bot.firebaseapp.com",
-    projectId: "futures-scalping-bot",
-    storageBucket: "futures-scalping-bot.firebasestorage.app",
-    messagingSenderId: "29947087757",
-    appId: "1:29947087757:web:a3eef514422c8810b44bc4",
-    databaseURL: "https://futures-scalping-bot-default-rtdb.europe-west1.firebasedatabase.app"
-  };
+        const firebaseConfig = {
+            apiKey: "AIzaSyDaHs-CLoLaAfBDMsTL35DfjhtLryAkaB0",
+            authDomain: "futures-scalping-bot.firebaseapp.com",
+            projectId: "futures-scalping-bot",
+            storageBucket: "futures-scalping-bot.firebasestorage.app",
+            messagingSenderId: "29947087757",
+            appId: "1:29947087757:web:a3eef514422c8810b44bc4",
+            databaseURL: "https://futures-scalping-bot-default-rtdb.europe-west1.firebasedatabase.app"
+        };
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  console.log('🔥 Firebase готов!');
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        console.log('🔥 Firebase готов!');
 
-  // Сохраняем сделки в Firebase
-  const originalExecuteTrade = window.executeTrade;
-  window.executeTrade = function(instrument, side, price) {
-    const result = originalExecuteTrade(instrument, side, price);
-    if (side === 'sell') {
-      const lastTrade = STATE.trades[STATE.trades.length - 1];
-      if (lastTrade) {
-        push(ref(db, 'trades'), {
-          instrument: lastTrade.instrument,
-          side: lastTrade.side,
-          price: lastTrade.price,
-          profit: lastTrade.profit,
-          timestamp: lastTrade.timestamp,
-          balance: STATE.balance
-        });
-      }
-    }
-    return result;
-  };
-</script>
+        // Сохраняем сделки в Firebase
+        const originalExecuteTrade = window.executeTrade;
+        window.executeTrade = function(instrument, side, price) {
+            const result = originalExecuteTrade(instrument, side, price);
+            if (side === 'sell') {
+                const lastTrade = STATE.trades[STATE.trades.length - 1];
+                if (lastTrade) {
+                    push(ref(db, 'trades'), {
+                        instrument: lastTrade.instrument,
+                        side: lastTrade.side,
+                        price: lastTrade.price,
+                        profit: lastTrade.profit,
+                        timestamp: lastTrade.timestamp,
+                        balance: STATE.balance
+                    }).then(() => {
+                        console.log('✅ Сделка сохранена в Firebase');
+                    }).catch((error) => {
+                        console.error('❌ Ошибка сохранения в Firebase:', error);
+                    });
+                }
+            }
+            return result;
+        };
+
+        // ============================================================
+        //  ЗАГРУЗКА ИСТОРИИ ИЗ FIREBASE ПРИ СТАРТЕ
+        // ============================================================
+        async function loadTradesFromFirebase() {
+            try {
+                const tradesRef = ref(db, 'trades');
+                const snapshot = await get(tradesRef);
+                const data = snapshot.val();
+                
+                if (data) {
+                    const trades = Object.values(data);
+                    // Восстанавливаем баланс из последней сделки
+                    const lastTrade = trades[trades.length - 1];
+                    if (lastTrade && lastTrade.balance) {
+                        STATE.balance = lastTrade.balance;
+                    }
+                    
+                    // Добавляем сделки в STATE (кроме последней, которая уже учтена в балансе)
+                    let count = 0;
+                    trades.forEach(t => {
+                        if (t.timestamp && t.price) {
+                            STATE.trades.push({
+                                id: Date.now() + Math.random() * count,
+                                instrument: t.instrument || 'RTS',
+                                side: t.side || 'sell',
+                                price: t.price || 0,
+                                profit: t.profit || 0,
+                                timestamp: t.timestamp || new Date().toISOString(),
+                                timeStr: new Date(t.timestamp).toLocaleTimeString()
+                            });
+                            STATE.stats.total++;
+                            if (t.profit > 0) STATE.stats.wins++;
+                            else STATE.stats.losses++;
+                            STATE.stats.profit += t.profit || 0;
+                            count++;
+                        }
+                    });
+                    
+                    console.log(`📥 Загружено ${count} сделок из Firebase`);
+                    render(); // Обновляем интерфейс
+                }
+            } catch (error) {
+                console.error('❌ Ошибка загрузки истории:', error);
+            }
+        }
+
+        // Загружаем историю при старте
+        loadTradesFromFirebase();
+    </script>
 </body>
 </html>
