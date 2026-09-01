@@ -158,7 +158,7 @@ function updateTimeframe(interval) {
     drawCandleChart();
 }
 
-// ===== НАСТРОЙКА УПРАВЛЕНИЯ =====
+// ===== НАСТРОЙКА УПРАВЛЕНИЯ (ГЛОБАЛЬНАЯ) =====
 function setupChartControls() {
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -223,10 +223,10 @@ window.destroyChart = function() {
     }
 };
 
-// ===== ЭКСПОРТЫ =====
+// ===== ЭКСПОРТЫ В ГЛОБАЛЬНУЮ ОБЛАСТЬ =====
 window.drawCandleChart = drawCandleChart;
 window.loadMinuteCandles = loadMinuteCandles;
-window.setupChartControls = setupChartControls;
+window.setupChartControls = setupChartControls;   // ← ЯВНО ДОБАВЛЯЕМ В window
 window.updateTimeframe = updateTimeframe;
 
 console.log('📊 chart-loader.js загружен');
