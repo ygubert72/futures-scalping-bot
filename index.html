@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Futures Scalping Bot</title>
+    <!-- ✅ ПОДКЛЮЧАЕМ БИБЛИОТЕКУ КАК ОБЫЧНЫЙ СКРИПТ -->
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -48,8 +50,8 @@
                             </div>
                         </div>
                     </div>
-                    <div id="chart-container" style="height: 500px; width: 100%;">
-                        <!-- Здесь будет график от lightweight-charts -->
+                    <div id="chart-container" style="height:500px; width:100%;">
+                        <!-- Здесь будет график -->
                     </div>
                     <div style="display:flex;justify-content:space-between;flex-shrink:0;padding-top:4px;">
                         <div style="font-size:10px;color:#64748b;">
@@ -101,7 +103,7 @@
         </div>
     </div>
 
-    <!-- ===== ПОДКЛЮЧАЕМ СКРИПТЫ В ПРАВИЛЬНОМ ПОРЯДКЕ ===== -->
+    <!-- ===== ПОДКЛЮЧАЕМ ВСЕ СКРИПТЫ ===== -->
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
     <script src="js/trading.js"></script>
