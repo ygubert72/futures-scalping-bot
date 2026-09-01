@@ -2,7 +2,7 @@
 //  ЗАГРУЗЧИК БИБЛИОТЕКИ lightweight-charts (ESM)
 // ============================================================
 
-let chartInstance = null;.
+let chartInstance = null;
 let candlestickSeries = null;
 
 // Функция для загрузки библиотеки
