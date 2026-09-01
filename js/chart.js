@@ -8,8 +8,8 @@ let chartState = {
     dragStartOffset: 0,
 };
 
-// Глобальный центр графика (пересчитывается при смене таймфрейма/инструмента)
-let fixedChartCenter = null;
+// Глобальный центр графика (доступен через window для отладки)
+window.fixedChartCenter = null;
 
 function getOptimalCandleCount() {
     const container = document.getElementById('chart-container');
@@ -103,10 +103,10 @@ function drawCandleChart() {
         if (c.high > max) max = c.high;
     });
     
-    // Если центр ещё не зафиксирован — фиксируем на основе текущих данных
-    if (fixedChartCenter === null) {
-        fixedChartCenter = (max + min) / 2;
-        console.log(`📌 Центр зафиксирован для ${inst} (${STATE.interval}м):`, fixedChartCenter);
+    // Если центр ещё не зафиксирован — фиксируем
+    if (window.fixedChartCenter === null || window.fixedChartCenter === undefined) {
+        window.fixedChartCenter = (max + min) / 2;
+        console.log(`📌 Центр зафиксирован для ${inst} (${STATE.interval}м):`, window.fixedChartCenter);
     }
     
     // Диапазон цен
@@ -119,8 +119,8 @@ function drawCandleChart() {
     const halfRange = (finalRange * 0.6) / verticalZoom;
     
     // Границы строго относительно зафиксированного центра
-    let priceMin = fixedChartCenter - halfRange;
-    let priceMax = fixedChartCenter + halfRange;
+    let priceMin = window.fixedChartCenter - halfRange;
+    let priceMax = window.fixedChartCenter + halfRange;
     
     const padding = (priceMax - priceMin) * 0.05;
     priceMin -= padding;
@@ -242,13 +242,14 @@ function drawCandleChart() {
 //  ФУНКЦИЯ ДЛЯ ПРИНУДИТЕЛЬНОГО СБРОСА ЦЕНТРА
 // ============================================================
 function resetChartCenter() {
-    fixedChartCenter = null;
+    window.fixedChartCenter = null;
     STATE.verticalZoom = 1;
     STATE.zoomLevel = 1;
     STATE.offset = 0;
     console.log('🔄 Центр графика сброшен');
     drawCandleChart();
 }
+window.resetChartCenter = resetChartCenter;
 
 function setupChartControls() {
     const canvas = document.getElementById('candleChart');
@@ -301,7 +302,7 @@ function setupChartControls() {
             STATE.interval = parseInt(this.dataset.interval);
             
             // ПРИНУДИТЕЛЬНО СБРАСЫВАЕМ ЦЕНТР ПРИ СМЕНЕ ТАЙМФРЕЙМА
-            fixedChartCenter = null;
+            window.fixedChartCenter = null;
             STATE.zoomLevel = 1;
             STATE.verticalZoom = 1;
             STATE.offset = 0;
@@ -318,6 +319,7 @@ function setupChartControls() {
                     STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
                 }
             }
+            // Принудительно перерисовываем с новым центром
             drawCandleChart();
         });
     });
@@ -338,7 +340,7 @@ window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
     
     // ПРИНУДИТЕЛЬНО СБРАСЫВАЕМ ЦЕНТР ПРИ СМЕНЕ ИНСТРУМЕНТА
-    fixedChartCenter = null;
+    window.fixedChartCenter = null;
     STATE.zoomLevel = 1;
     STATE.verticalZoom = 1;
     STATE.offset = 0;
