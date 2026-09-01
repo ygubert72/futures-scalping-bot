@@ -101,10 +101,13 @@ function drawCandleChart() {
     });
     
     const range = max - min || 1;
-    const minRange = inst === 'RTS' ? 2 : 0.05;
+    
+    // ⚠️ МИНИМАЛЬНЫЙ ДИАПАЗОН ДЛЯ ВЫСОТЫ СВЕЧЕЙ
+    // Если диапазон слишком маленький, растягиваем его
+    const minRange = inst === 'RTS' ? 50 : 0.5;  // RTS: минимум 50 пунктов, Si: минимум 0.5 пункта
     const finalRange = Math.max(range, minRange);
     
-    // ЦЕНТР ГРАФИКА (фиксируем для вертикального зума)
+    // Центр графика
     const center = (max + min) / 2;
     const halfRange = finalRange * 0.6;
     
@@ -138,10 +141,9 @@ function drawCandleChart() {
         ctx.fillText(price.toFixed(2), pad.left - 5, y + 3);
     }
 
-    // ========== 6. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ (ИСПРАВЛЕНО!) ==========
-    // Минимальная ширина свечи — 4px, максимальная — 30px
+    // ========== 6. РАСЧЁТ ШИРИНЫ СВЕЧЕЙ ==========
     let candleWidth = (chartW / visible.length) * 0.75;
-    candleWidth = Math.max(4, Math.min(30, candleWidth));
+    candleWidth = Math.max(4, Math.min(20, candleWidth));
     const gap = Math.max(0.5, (chartW / visible.length) - candleWidth);
     
     // ========== 7. РИСОВАНИЕ СВЕЧЕЙ ==========
