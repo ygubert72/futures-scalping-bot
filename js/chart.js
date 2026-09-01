@@ -1,17 +1,15 @@
 // ============================================================
 //  ГРАФИК НА lightweight-charts
-//  Всё работает "из коробки": зум, центр, адаптация
 // ============================================================
 
 let chartInstance = null;
 let candlestickSeries = null;
-let currentSymbol = 'RTS';
 
 // Функция для получения данных из STATE
 function getCandleData(instrument) {
     const candles = STATE.candles[instrument] || [];
     return candles.map(c => ({
-        time: Math.floor(c.time / 1000), // lightweight-charts требует секунды
+        time: Math.floor(c.time / 1000),
         open: c.open,
         high: c.high,
         low: c.low,
@@ -22,21 +20,40 @@ function getCandleData(instrument) {
 // Создание или обновление графика
 function drawCandleChart() {
     const container = document.getElementById('chart-container');
-    if (!container) return;
+    if (!container) {
+        console.error('Контейнер chart-container не найден');
+        return;
+    }
+
+    // Проверяем, что библиотека загружена
+    if (typeof createChart === 'undefined') {
+        console.error('Библиотека lightweight-charts не загружена!');
+        // Пробуем загрузить через глобальный объект
+        if (window.LightweightCharts) {
+            window.createChart = window.LightweightCharts.createChart;
+        } else {
+            setTimeout(drawCandleChart, 1000);
+            return;
+        }
+    }
 
     const instrument = STATE.currentInstrument || 'RTS';
     const data = getCandleData(instrument);
 
     if (data.length === 0) {
         console.log('Нет данных для графика');
+        container.innerHTML = '<div style="color:#64748b;text-align:center;padding:20px;">Загрузка данных...</div>';
         return;
     }
 
     // Если графика нет — создаём
     if (!chartInstance) {
+        // Очищаем контейнер
+        container.innerHTML = '';
+
         chartInstance = createChart(container, {
-            width: container.clientWidth,
-            height: container.clientHeight,
+            width: container.clientWidth || 600,
+            height: container.clientHeight || 500,
             layout: {
                 background: { color: '#0f172a' },
                 textColor: '#d1d5db',
@@ -71,21 +88,20 @@ function drawCandleChart() {
 
         // Автоматическое обновление при ресайзе
         const resizeObserver = new ResizeObserver(() => {
-            if (chartInstance) {
-                chartInstance.applyOptions({
-                    width: container.clientWidth,
-                    height: container.clientHeight,
-                });
+            if (chartInstance && container) {
+                const width = container.clientWidth || 600;
+                const height = container.clientHeight || 500;
+                chartInstance.applyOptions({ width, height });
             }
         });
         resizeObserver.observe(container);
         window._resizeObserver = resizeObserver;
+        
+        console.log('✅ График создан');
     }
 
     // Обновляем данные
     candlestickSeries.setData(data);
-
-    // Автоматическое масштабирование
     chartInstance.timeScale().fitContent();
 
     // Обновляем счётчик свечей
@@ -97,7 +113,6 @@ function drawCandleChart() {
 // Функция для переключения инструмента
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
-    currentSymbol = instrument;
     
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
     document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
@@ -128,7 +143,6 @@ function updateTimeframe(interval) {
 
 // Инициализация контролов
 function setupChartControls() {
-    // Переключение таймфреймов
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
@@ -138,7 +152,7 @@ function setupChartControls() {
     });
 }
 
-// Очистка графика при необходимости
+// Очистка графика
 function destroyChart() {
     if (window._resizeObserver) {
         window._resizeObserver.disconnect();
@@ -149,9 +163,13 @@ function destroyChart() {
         chartInstance = null;
         candlestickSeries = null;
     }
+    const container = document.getElementById('chart-container');
+    if (container) {
+        container.innerHTML = '';
+    }
 }
 
-// Функция загрузки 1-минутных свечей (добавляем, чтобы не было ошибок)
+// Функция загрузки 1-минутных свечей
 async function loadMinuteCandles(instrument = 'RTS') {
     const candles = await fetchMinuteCandles(instrument);
     if (candles && candles.length > 10) {
@@ -174,3 +192,46 @@ async function loadMinuteCandles(instrument = 'RTS') {
     }
     drawCandleChart();
 }
+
+// ===== ВЕРТИКАЛЬНЫЙ ЗУМ (кнопки) =====
+document.addEventListener('DOMContentLoaded', function() {
+    const zoomInBtn = document.getElementById('zoomInV');
+    const zoomOutBtn = document.getElementById('zoomOutV');
+    const zoomResetBtn = document.getElementById('zoomResetV');
+    
+    if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', () => {
+            if (chartInstance) {
+                const priceScale = chartInstance.priceScale();
+                const currentScale = priceScale.scale();
+                priceScale.applyOptions({ scale: currentScale * 1.2 });
+            }
+        });
+    }
+    
+    if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', () => {
+            if (chartInstance) {
+                const priceScale = chartInstance.priceScale();
+                const currentScale = priceScale.scale();
+                priceScale.applyOptions({ scale: currentScale * 0.8 });
+            }
+        });
+    }
+    
+    if (zoomResetBtn) {
+        zoomResetBtn.addEventListener('click', () => {
+            if (chartInstance) {
+                chartInstance.priceScale().applyOptions({ scale: 1 });
+                chartInstance.timeScale().fitContent();
+            }
+        });
+    }
+});
+
+// Экспортируем для других файлов
+window.drawCandleChart = drawCandleChart;
+window.loadMinuteCandles = loadMinuteCandles;
+window.setupChartControls = setupChartControls;
+window.destroyChart = destroyChart;
+window.updateTimeframe = updateTimeframe;
