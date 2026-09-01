@@ -7,7 +7,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await detectInstrumentCodes();
     console.log('📊 Используемые коды:', INSTRUMENT_CODES);
     
-    setupChartControls();
+    // setupChartControls(); // ← ЗАКОММЕНТИРУЙ ЭТУ СТРОКУ
+    
     await loadMinuteCandles('RTS');
     
     const rts = await fetchQuote('RTS');
