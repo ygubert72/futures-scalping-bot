@@ -55,13 +55,26 @@ function render() {
         document.getElementById('priceChange').className = 'change';
     }
     
-    drawCandleChart();
+    // Используем безопасную отрисовку графика
+    if (typeof safeDrawCandleChart === 'function') {
+        safeDrawCandleChart();
+    } else if (typeof drawCandleChart === 'function') {
+        drawCandleChart();
+    }
 }
+
+// ============================================================
+//  УПРАВЛЕНИЕ СТРАТЕГИЯМИ
+// ============================================================
 
 function toggleStrategy(instrument) {
     STATE.strategies[instrument] = !STATE.strategies[instrument];
     render();
 }
+
+// ============================================================
+//  ЭКСПОРТ В EXCEL
+// ============================================================
 
 async function exportToExcel() {
     try {
@@ -146,7 +159,10 @@ function loadScript(src) {
     });
 }
 
-// Экспортируем
+// ============================================================
+//  ЭКСПОРТ
+// ============================================================
+
 window.render = render;
 window.toggleStrategy = toggleStrategy;
 window.exportToExcel = exportToExcel;
