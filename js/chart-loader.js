@@ -66,14 +66,12 @@ function drawCandleChart() {
             },
             rightPriceScale: { 
                 borderColor: '#1e293b',
-                // ВАЖНО: scaleMargins для центрирования
                 scaleMargins: {
-                    top: 0.08,   // Отступ сверху (8%)
-                    bottom: 0.08, // Отступ снизу (8%)
+                    top: 0.10,
+                    bottom: 0.10,
                 },
                 autoScale: true,
             },
-            // ВАЖНО: включить авто-масштабирование
             handleScroll: {
                 mouseWheel: true,
                 pressedMouseMove: true,
@@ -88,17 +86,14 @@ function drawCandleChart() {
             },
         });
 
-        // Сохраняем ссылку на priceScale
         priceScaleRef = chartInstance.priceScale();
         
-        // Добавляем серию свечей
         candlestickSeries = chartInstance.addCandlestickSeries({
             upColor: '#22c55e',
             downColor: '#ef4444',
             borderVisible: false,
             wickUpColor: '#22c55e',
             wickDownColor: '#ef4444',
-            // ВАЖНО: настройка ширины свечей
             priceFormat: {
                 type: 'price',
                 precision: 2,
@@ -106,7 +101,7 @@ function drawCandleChart() {
             },
         });
 
-        // --- ОБРАБОТЧИК РЕСАЙЗА ---
+        // Обработчик ресайза
         const resizeObserver = new ResizeObserver(() => {
             if (chartInstance && container) {
                 const w = container.clientWidth || 600;
@@ -115,68 +110,61 @@ function drawCandleChart() {
                     width: w,
                     height: h,
                 });
-                // Авто-масштабирование после ресайза
-                if (candlestickSeries) {
-                    chartInstance.timeScale().fitContent();
-                }
+                setTimeout(centerChart, 100);
             }
         });
         resizeObserver.observe(container);
         window._resizeObserver = resizeObserver;
         
-        console.log('✅ График создан с центрированием');
+        console.log('✅ График создан');
     }
 
     // --- ОБНОВЛЕНИЕ ДАННЫХ ---
     if (candlestickSeries) {
         candlestickSeries.setData(data);
-        // ВАЖНО: авто-масштабирование для нормального отображения свечей
         chartInstance.timeScale().fitContent();
         
-        // Принудительно обновляем priceScale для центрирования
         if (priceScaleRef) {
             priceScaleRef.applyOptions({
                 scaleMargins: {
-                    top: 0.08,
-                    bottom: 0.08,
+                    top: 0.10,
+                    bottom: 0.10,
                 },
             });
         }
     }
 
-    // Обновляем информацию
     document.getElementById('candleCount').textContent = data.length;
     document.getElementById('timeframeLabel').textContent =
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval / 60) + 'ч';
 }
 
-// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
-
-// Функция для центрирования графика
+// ===== ЦЕНТРИРОВАНИЕ =====
 function centerChart() {
     if (chartInstance && candlestickSeries) {
         chartInstance.timeScale().fitContent();
         if (priceScaleRef) {
             priceScaleRef.applyOptions({
                 scaleMargins: {
-                    top: 0.08,
-                    bottom: 0.08,
+                    top: 0.10,
+                    bottom: 0.10,
                 },
             });
         }
     }
 }
 
-// Вертикальный зум с центрированием
+// ===== ВЕРТИКАЛЬНЫЙ ЗУМ =====
 function zoomVertical(factor) {
     if (!chartInstance || !priceScaleRef) return;
     
-    // Получаем текущие маржи
-    const currentMargins = priceScaleRef.options().scaleMargins || { top: 0.08, bottom: 0.08 };
+    const currentMargins = priceScaleRef.options().scaleMargins || { top: 0.10, bottom: 0.10 };
     
-    // Меняем маржи для центрирования
-    const newTop = Math.max(0.01, Math.min(0.4, currentMargins.top * factor));
-    const newBottom = Math.max(0.01, Math.min(0.4, currentMargins.bottom * factor));
+    let newTop = currentMargins.top * factor;
+    let newBottom = currentMargins.bottom * factor;
+    
+    newTop = Math.max(0.01, Math.min(0.40, newTop));
+    newBottom = Math.max(0.01, Math.min(0.40, newBottom));
     
     priceScaleRef.applyOptions({
         scaleMargins: {
@@ -186,40 +174,21 @@ function zoomVertical(factor) {
     });
 }
 
-// Горизонтальный зум
-function zoomHorizontal(factor) {
-    if (!chartInstance) return;
-    const timeScale = chartInstance.timeScale();
-    const currentRange = timeScale.getVisibleRange();
-    if (!currentRange) return;
-    
-    const from = currentRange.from;
-    const to = currentRange.to;
-    const mid = (from + to) / 2;
-    const halfRange = (to - from) / 2 * factor;
-    
-    timeScale.setVisibleRange({
-        from: mid - halfRange,
-        to: mid + halfRange,
-    });
-}
-
-// Сброс всех масштабов
+// ===== СБРОС ЗУМА =====
 function resetZoom() {
     if (!chartInstance) return;
     if (priceScaleRef) {
         priceScaleRef.applyOptions({
             scaleMargins: {
-                top: 0.08,
-                bottom: 0.08,
+                top: 0.10,
+                bottom: 0.10,
             },
         });
     }
     chartInstance.timeScale().fitContent();
 }
 
-// ===== ЗАГРУЗКА ДАННЫХ =====
-
+// ===== ЗАГРУЗКА СВЕЧЕЙ =====
 async function loadMinuteCandles(instrument = 'RTS') {
     const candles = await fetchMinuteCandles(instrument);
     if (candles && candles.length > 10) {
@@ -244,7 +213,6 @@ async function loadMinuteCandles(instrument = 'RTS') {
 }
 
 // ===== ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА =====
-
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
@@ -257,7 +225,6 @@ window.switchInstrument = async function(instrument) {
 };
 
 // ===== ОБНОВЛЕНИЕ ТАЙМФРЕЙМА =====
-
 function updateTimeframe(interval) {
     STATE.interval = interval;
     const inst = STATE.currentInstrument || 'RTS';
@@ -274,7 +241,6 @@ function updateTimeframe(interval) {
 }
 
 // ===== НАСТРОЙКА УПРАВЛЕНИЯ =====
-
 function setupChartControls() {
     // Кнопки таймфрейма
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
@@ -285,39 +251,23 @@ function setupChartControls() {
         });
     });
     
-    // Вертикальный зум с центрированием
+    // Вертикальный зум
     document.getElementById('zoomInV')?.addEventListener('click', () => {
-        zoomVertical(0.7); // Уменьшаем маржи -> увеличиваем масштаб
+        zoomVertical(0.7);
     });
     document.getElementById('zoomOutV')?.addEventListener('click', () => {
-        zoomVertical(1.3); // Увеличиваем маржи -> уменьшаем масштаб
+        zoomVertical(1.3);
     });
     document.getElementById('zoomResetV')?.addEventListener('click', resetZoom);
     
-    // Обработчик колесика мыши для горизонтального зума
+    // Обработчик колесика мыши
     const container = document.getElementById('chart-container');
     if (container) {
         container.addEventListener('wheel', (e) => {
-            // Если зажат Ctrl - вертикальный зум
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
                 const factor = e.deltaY > 0 ? 1.3 : 0.7;
                 zoomVertical(factor);
-            } else {
-                // Горизонтальный зум через timeScale работает автоматически
-                // Но мы можем добавить дополнительную логику
-                const timeScale = chartInstance?.timeScale();
-                if (timeScale) {
-                    // Предотвращаем слишком сильный зум
-                    const range = timeScale.getVisibleRange();
-                    if (range) {
-                        const width = range.to - range.from;
-                        if (width < 60) {
-                            // Если слишком маленький интервал, центрируем
-                            setTimeout(centerChart, 100);
-                        }
-                    }
-                }
             }
         }, { passive: false });
     }
@@ -329,21 +279,63 @@ function setupChartControls() {
         centerBtn.id = 'centerChart';
         centerBtn.textContent = '🎯 Центр';
         centerBtn.title = 'Центрировать график';
+        centerBtn.style.marginLeft = 'auto';
         centerBtn.onclick = centerChart;
         controls.appendChild(centerBtn);
     }
     
-    console.log('✅ Управление графиком настроено (с центрированием)');
+    console.log('✅ Управление графиком настроено');
 }
 
-// Экспортируем функции
+// ===== АГРЕГАЦИЯ СВЕЧЕЙ =====
+function aggregateCandles(minuteCandles, intervalMinutes) {
+    if (intervalMinutes === 1 || !minuteCandles || minuteCandles.length === 0) {
+        return minuteCandles;
+    }
+    
+    const result = [];
+    let current = null;
+    let count = 0;
+    
+    for (const candle of minuteCandles) {
+        if (!current) {
+            current = {
+                time: candle.time,
+                open: candle.open,
+                high: candle.high,
+                low: candle.low,
+                close: candle.close,
+            };
+            count = 1;
+        } else {
+            current.high = Math.max(current.high, candle.high);
+            current.low = Math.min(current.low, candle.low);
+            current.close = candle.close;
+            count++;
+        }
+        
+        if (count >= intervalMinutes) {
+            result.push({ ...current });
+            current = null;
+            count = 0;
+        }
+    }
+    
+    if (current) {
+        result.push(current);
+    }
+    
+    return result;
+}
+
+// Экспортируем
 window.drawCandleChart = drawCandleChart;
 window.loadMinuteCandles = loadMinuteCandles;
 window.setupChartControls = setupChartControls;
 window.updateTimeframe = updateTimeframe;
 window.centerChart = centerChart;
 window.zoomVertical = zoomVertical;
-window.zoomHorizontal = zoomHorizontal;
 window.resetZoom = resetZoom;
+window.aggregateCandles = aggregateCandles;
 
-console.log('📊 chart-loader.js загружен (исправленная версия)');
+console.log('📊 chart-loader.js загружен');
