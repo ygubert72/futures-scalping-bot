@@ -2,6 +2,57 @@
 //  ЗАПРОСЫ К МОСКОВСКОЙ БИРЖЕ (MOEX)
 // ============================================================
 
+// ============================================================
+//  АГРЕГАЦИЯ СВЕЧЕЙ
+// ============================================================
+
+function aggregateCandles(minuteCandles, intervalMinutes) {
+    if (intervalMinutes === 1 || !minuteCandles || minuteCandles.length === 0) {
+        return minuteCandles || [];
+    }
+    
+    const result = [];
+    let current = null;
+    let count = 0;
+    
+    for (const candle of minuteCandles) {
+        if (!current) {
+            current = {
+                time: candle.time,
+                open: candle.open,
+                high: candle.high,
+                low: candle.low,
+                close: candle.close,
+            };
+            count = 1;
+        } else {
+            current.high = Math.max(current.high, candle.high);
+            current.low = Math.min(current.low, candle.low);
+            current.close = candle.close;
+            count++;
+        }
+        
+        if (count >= intervalMinutes) {
+            result.push({ ...current });
+            current = null;
+            count = 0;
+        }
+    }
+    
+    if (current) {
+        result.push(current);
+    }
+    
+    return result;
+}
+
+// Экспортируем для использования в других файлах
+window.aggregateCandles = aggregateCandles;
+
+// ============================================================
+//  ОПРЕДЕЛЕНИЕ КОДОВ ИНСТРУМЕНТОВ
+// ============================================================
+
 async function detectInstrumentCodes() {
     try {
         const resp = await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities.json');
@@ -68,6 +119,10 @@ async function detectInstrumentCodes() {
     }
 }
 
+// ============================================================
+//  ПОЛУЧЕНИЕ МИНУТНЫХ СВЕЧЕЙ С MOEX
+// ============================================================
+
 async function fetchMinuteCandles(instrument) {
     try {
         const sec = INSTRUMENT_CODES[instrument];
@@ -104,6 +159,10 @@ async function fetchMinuteCandles(instrument) {
     }
 }
 
+// ============================================================
+//  ПОЛУЧЕНИЕ ТЕКУЩЕЙ КОТИРОВКИ
+// ============================================================
+
 async function fetchQuote(instrument) {
     try {
         const sec = INSTRUMENT_CODES[instrument];
@@ -122,6 +181,10 @@ async function fetchQuote(instrument) {
         return null;
     }
 }
+
+// ============================================================
+//  ГЕНЕРАЦИЯ ТЕСТОВЫХ СВЕЧЕЙ (для демо-режима)
+// ============================================================
 
 function generateTestCandles(count, startPrice, stepMinutes = 1) {
     const now = Date.now();
@@ -146,3 +209,141 @@ function generateTestCandles(count, startPrice, stepMinutes = 1) {
     }
     return candles;
 }
+
+// ============================================================
+//  ПОЛУЧЕНИЕ ИСТОРИИ ДЛЯ РАЗНЫХ ТАЙМФРЕЙМОВ
+// ============================================================
+
+async function fetchHistory(symbol, timeframe = '1min', limit = 500) {
+    try {
+        const sec = INSTRUMENT_CODES[symbol];
+        if (!sec) return null;
+        
+        // Маппинг таймфреймов MOEX
+        const intervalMap = {
+            '1min': 1,
+            '5min': 5,
+            '10min': 10,
+            '15min': 15,
+            '30min': 30,
+            '1hour': 60,
+            '2hour': 120,
+            '4hour': 240,
+            '1day': 1440,
+            '1week': 10080,
+            '1month': 43200
+        };
+        
+        const interval = intervalMap[timeframe] || 1;
+        const now = new Date();
+        const from = new Date(now);
+        from.setDate(from.getDate() - 30);
+        
+        const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}/candles.json`;
+        const params = new URLSearchParams({
+            from: from.toISOString().slice(0,16),
+            till: now.toISOString().slice(0,16),
+            interval: interval,
+        });
+        
+        const resp = await fetch(`${url}?${params}`);
+        const data = await resp.json();
+        const candles = data.candles?.data || [];
+        const cols = data.candles?.columns || [];
+        
+        if (candles.length === 0) return null;
+        
+        // Берем последние limit свечей
+        const limited = candles.slice(-limit);
+        
+        return limited.map(row => ({
+            time: Math.floor(new Date(row[cols.indexOf('begin')]).getTime() / 1000),
+            open: row[cols.indexOf('open')],
+            high: row[cols.indexOf('high')],
+            low: row[cols.indexOf('low')],
+            close: row[cols.indexOf('close')],
+            volume: row[cols.indexOf('volume')] || 0,
+        }));
+    } catch (e) {
+        console.warn('MOEX история ошибка:', e);
+        return null;
+    }
+}
+
+// ============================================================
+//  ПОЛУЧЕНИЕ ИНФОРМАЦИИ ОБ ИНСТРУМЕНТЕ
+// ============================================================
+
+async function fetchInstrumentInfo(instrument) {
+    try {
+        const sec = INSTRUMENT_CODES[instrument];
+        if (!sec) return null;
+        
+        const url = `https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/${sec}.json`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        const descRow = data.description?.data?.[0];
+        const descCols = data.description?.columns || [];
+        
+        if (!descRow) return null;
+        
+        return {
+            name: descRow[descCols.indexOf('SHORTNAME')] || sec,
+            lotsize: descRow[descCols.indexOf('LOTSIZE')] || 1,
+            minstep: descRow[descCols.indexOf('MINSTEP')] || 1,
+            currency: 'RUB',
+        };
+    } catch {
+        return null;
+    }
+}
+
+// ============================================================
+//  ПОЛУЧЕНИЕ ВСЕХ ДОСТУПНЫХ ФЬЮЧЕРСОВ
+// ============================================================
+
+async function fetchAllFutures() {
+    try {
+        const resp = await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities.json');
+        const data = await resp.json();
+        const rows = data.securities?.data || [];
+        const cols = data.securities?.columns || [];
+        
+        const secIdx = cols.indexOf('SECID');
+        const nameIdx = cols.indexOf('SHORTNAME');
+        const boardIdx = cols.indexOf('BOARDID');
+        
+        const futures = [];
+        
+        rows.forEach(row => {
+            const board = row[boardIdx];
+            if (board !== 'RFUD') return;
+            
+            futures.push({
+                secid: row[secIdx],
+                name: row[nameIdx] || row[secIdx],
+            });
+        });
+        
+        return futures;
+    } catch (e) {
+        console.warn('Ошибка получения списка фьючерсов:', e);
+        return [];
+    }
+}
+
+// ============================================================
+//  ЭКСПОРТ ВСЕХ ФУНКЦИЙ ДЛЯ ГЛОБАЛЬНОГО ИСПОЛЬЗОВАНИЯ
+// ============================================================
+
+window.aggregateCandles = aggregateCandles;
+window.detectInstrumentCodes = detectInstrumentCodes;
+window.fetchMinuteCandles = fetchMinuteCandles;
+window.fetchQuote = fetchQuote;
+window.generateTestCandles = generateTestCandles;
+window.fetchHistory = fetchHistory;
+window.fetchInstrumentInfo = fetchInstrumentInfo;
+window.fetchAllFutures = fetchAllFutures;
+
+console.log('📡 api.js загружен');
