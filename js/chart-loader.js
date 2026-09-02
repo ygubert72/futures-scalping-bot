@@ -1,5 +1,5 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts) — С ИСПРАВЛЕННЫМ ЗУМОМ
+//  ГРАФИК (lightweight-charts) — ПОЛНАЯ ВЕРСИЯ
 // ============================================================
 
 let chartInstance = null;
@@ -250,45 +250,73 @@ function resetZoom() {
 }
 
 // ============================================================
-//  ЗАГРУЗКА СВЕЧЕЙ
+//  ЗАГРУЗКА СВЕЧЕЙ (ИСПРАВЛЕННАЯ)
 // ============================================================
 
 async function loadMinuteCandles(instrument = 'RTS') {
+    console.log(`🔄 Загрузка данных для ${instrument}...`);
+    
+    // 1. Пробуем загрузить с MOEX
     const candles = await fetchMinuteCandles(instrument);
+    
     if (candles && candles.length > 10) {
         STATE.minuteCandles[instrument] = candles;
         console.log(`✅ Загружено 1м свечей (${instrument}):`, candles.length);
     } else {
+        // 2. Если MOEX не дал данные — генерируем тестовые
         const startPrice = instrument === 'RTS' ? 78000 : 88;
         STATE.minuteCandles[instrument] = generateTestCandles(200, startPrice, 1);
         console.log(`📊 Тестовые 1м свечи (${instrument})`);
     }
+    
+    // 3. ВСЕГДА обновляем STATE.candles из minuteCandles
     const minuteCandles = STATE.minuteCandles[instrument] || [];
     if (minuteCandles.length > 0) {
-        const interval = STATE.interval || 1;
-        STATE.candles[instrument] = interval === 1
-            ? minuteCandles
-            : aggregateCandles(minuteCandles, interval);
+        // ВСЕГДА используем минутные данные для отображения
+        STATE.candles[instrument] = minuteCandles.slice();
+        
+        // Ограничиваем количество для производительности
         if (STATE.candles[instrument].length > STATE.maxCandles) {
             STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
         }
+        
+        console.log(`📊 ${instrument} свечей для графика:`, STATE.candles[instrument].length);
     }
-    safeDrawCandleChart();
+    
+    // 4. Если это текущий инструмент — перерисовываем
+    if (STATE.currentInstrument === instrument) {
+        drawCandleChart();
+    }
 }
 
 // ============================================================
-//  ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА
+//  ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА (ИСПРАВЛЕННОЕ)
 // ============================================================
 
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
+    
+    // Обновляем кнопки
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
     document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
     document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
-    if (STATE.minuteCandles[instrument].length === 0) {
+    
+    // Проверяем, есть ли данные для этого инструмента
+    if (!STATE.minuteCandles[instrument] || STATE.minuteCandles[instrument].length === 0) {
         await loadMinuteCandles(instrument);
+    } else {
+        // Данные есть — обновляем STATE.candles из minuteCandles
+        const minuteCandles = STATE.minuteCandles[instrument] || [];
+        if (minuteCandles.length > 0) {
+            STATE.candles[instrument] = minuteCandles.slice();
+            if (STATE.candles[instrument].length > STATE.maxCandles) {
+                STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
+            }
+            console.log(`📊 ${instrument} свечей для графика:`, STATE.candles[instrument].length);
+        }
     }
-    safeDrawCandleChart();
+    
+    drawCandleChart();
 };
 
 // ============================================================
@@ -300,18 +328,18 @@ function updateTimeframe(interval) {
     const inst = STATE.currentInstrument || 'RTS';
     const minuteCandles = STATE.minuteCandles[inst] || [];
     if (minuteCandles.length > 0) {
-        STATE.candles[inst] = interval === 1
-            ? minuteCandles
-            : aggregateCandles(minuteCandles, interval);
+        // ВСЕГДА используем минутные данные
+        STATE.candles[inst] = minuteCandles.slice();
         if (STATE.candles[inst].length > STATE.maxCandles) {
             STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
         }
+        console.log(`📊 ${inst} свечей для графика (таймфрейм ${interval}м):`, STATE.candles[inst].length);
     }
-    safeDrawCandleChart();
+    drawCandleChart();
 }
 
 // ============================================================
-//  НАСТРОЙКА УПРАВЛЕНИЯ (БЕЗ СБРОСА НАКОПЛЕНИЯ)
+//  НАСТРОЙКА УПРАВЛЕНИЯ
 // ============================================================
 
 function setupChartControls() {
@@ -324,19 +352,20 @@ function setupChartControls() {
         });
     });
     
-    // Вертикальный зум (кнопки)
+    // Вертикальный зум
     document.getElementById('zoomInV')?.addEventListener('click', () => {
-        zoomVertical(0.6);
+        zoomVertical(0.7);
     });
     document.getElementById('zoomOutV')?.addEventListener('click', () => {
-        zoomVertical(1.5);
+        zoomVertical(1.3);
     });
     document.getElementById('zoomResetV')?.addEventListener('click', resetZoom);
     
-    // ===== ЗУМ КОЛЕСИКОМ (БЕЗ СБРОСА НАКОПЛЕНИЯ) =====
+    // Зум колесиком
     const container = document.getElementById('chart-container');
     if (container) {
         let accumulatedDelta = 0;
+        let zoomTimeout = null;
         const ZOOM_THRESHOLD = 0.2;
         
         container.addEventListener('wheel', function(e) {
@@ -344,17 +373,21 @@ function setupChartControls() {
                 e.preventDefault();
                 
                 accumulatedDelta += e.deltaY;
+                clearTimeout(zoomTimeout);
                 
                 if (Math.abs(accumulatedDelta) >= ZOOM_THRESHOLD) {
                     const factor = accumulatedDelta > 0 ? 1.2 : 0.8;
                     zoomVertical(factor);
-                    // НЕ СБРАСЫВАЕМ accumulatedDelta!
-                    // Оставляем накопление, чтобы зум продолжал меняться
+                    accumulatedDelta = 0;
                 }
+                
+                zoomTimeout = setTimeout(() => {
+                    accumulatedDelta = 0;
+                }, 150);
             }
         }, { passive: false });
         
-        console.log('✅ Обработчик колесика добавлен (без сброса накопления)');
+        console.log('✅ Обработчик колесика добавлен');
     }
     
     // Добавляем кнопку центрирования
@@ -369,7 +402,7 @@ function setupChartControls() {
         controls.appendChild(centerBtn);
     }
     
-    console.log('✅ Управление графиком настроено (БЕЗ сброса зума)');
+    console.log('✅ Управление графиком настроено');
 }
 
 // ============================================================
@@ -387,4 +420,4 @@ window.resetZoom = resetZoom;
 window.getLibrary = getLibrary;
 window.isLibraryLoaded = isLibraryLoaded;
 
-console.log('📊 chart-loader.js загружен (БЕЗ сброса зума)');
+console.log('📊 chart-loader.js загружен (ИСПРАВЛЕННАЯ ВЕРСИЯ)');
