@@ -22,12 +22,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Отрисовываем интерфейс
     render();
     
-    // Центрируем график после загрузки
+    // Если библиотека ещё не загружена - пробуем через 1 секунду
     setTimeout(() => {
-        if (typeof centerChart === 'function') {
-            centerChart();
+        if (typeof LightweightCharts === 'undefined') {
+            console.log('🔄 Повторная попытка загрузки библиотеки...');
+            if (typeof safeDrawCandleChart === 'function') {
+                safeDrawCandleChart();
+            }
         }
-    }, 500);
+    }, 1000);
     
     // ============================================================
     //  ЦИКЛ ОБНОВЛЕНИЯ
@@ -96,7 +99,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Обновление графика при ресайзе
     window.addEventListener('resize', () => {
-        if (typeof drawCandleChart === 'function') {
+        if (typeof safeDrawCandleChart === 'function') {
+            safeDrawCandleChart();
+        } else if (typeof drawCandleChart === 'function') {
             drawCandleChart();
         }
     });
