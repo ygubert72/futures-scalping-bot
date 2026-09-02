@@ -4,11 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Futures Scalping Bot</title>
-    <!-- ✅ ИСПРАВЛЕННАЯ ВЕРСИЯ 4.2.0 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.2.0/lightweight-charts.standalone.js" 
-            onload="window._libraryLoaded = true; console.log('✅ Библиотека загружена'); if (window._pendingDraw) { window._pendingDraw(); window._pendingDraw = null; }"
-            onerror="console.error('❌ Ошибка загрузки библиотеки!')">
-    </script>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -54,7 +49,7 @@
                         </div>
                     </div>
                     <div id="chart-container" style="height:500px; width:100%;">
-                        <div style="color:#64748b;padding:20px;text-align:center;">Загрузка графика...</div>
+                        <div style="color:#64748b;padding:20px;text-align:center;">⏳ Загрузка графика...</div>
                     </div>
                     <div style="display:flex;justify-content:space-between;flex-shrink:0;padding-top:4px;">
                         <div style="font-size:10px;color:#64748b;">
@@ -106,6 +101,10 @@
         </div>
     </div>
 
+    <!-- ===== ЗАГРУЗКА БИБЛИОТЕКИ (РАБОЧАЯ ССЫЛКА) ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.js">
+    </script>
+
     <!-- ===== ПОДКЛЮЧАЕМ ВСЕ СКРИПТЫ ===== -->
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
@@ -115,22 +114,18 @@
     <script src="js/app.js"></script>
     <script src="js/firebase.js" type="module"></script>
     
-    <!-- Финальная проверка загрузки библиотеки -->
+    <!-- ===== ПРОВЕРКА ЗАГРУЗКИ ===== -->
     <script>
     (function ensureLibrary() {
         if (typeof LightweightCharts !== 'undefined') {
             window._libraryLoaded = true;
-            console.log('✅ Библиотека LightweightCharts доступна');
-            if (window._pendingDraw && typeof window._pendingDraw === 'function') {
+            console.log('✅ Библиотека LightweightCharts загружена!');
+            if (window._pendingDraw) {
                 window._pendingDraw();
                 window._pendingDraw = null;
             }
-            if (document.getElementById('chart-container').innerHTML.includes('Загрузка')) {
-                setTimeout(() => {
-                    if (typeof drawCandleChart === 'function') {
-                        drawCandleChart();
-                    }
-                }, 100);
+            if (typeof drawCandleChart === 'function') {
+                setTimeout(drawCandleChart, 100);
             }
         } else {
             console.log('⏳ Ожидание загрузки библиотеки...');
