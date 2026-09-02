@@ -1,21 +1,31 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts) — ИСПРАВЛЕННАЯ ВЕРСИЯ
+//  ГРАФИК (lightweight-charts) — ПОЛНАЯ ВЕРСИЯ
 // ============================================================
 
 let chartInstance = null;
 let candlestickSeries = null;
 let priceScaleRef = null;
 
-function getCandleData(instrument) {
-    const candles = STATE.candles[instrument] || [];
-    return candles.map(c => ({
-        time: Math.floor(c.time / 1000),
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-    }));
+// ============================================================
+//  БЕЗОПАСНАЯ ОТРИСОВКА
+// ============================================================
+
+function safeDrawCandleChart() {
+    if (typeof LightweightCharts !== 'undefined') {
+        window._libraryLoaded = true;
+        drawCandleChart();
+        return true;
+    } else {
+        console.warn('⏳ Библиотека не загружена, откладываем отрисовку');
+        // Сохраняем вызов для повторной попытки
+        window._pendingDraw = drawCandleChart;
+        return false;
+    }
 }
+
+// ============================================================
+//  ОСНОВНАЯ ФУНКЦИЯ ОТРИСОВКИ
+// ============================================================
 
 function drawCandleChart() {
     const container = document.getElementById('chart-container');
@@ -25,8 +35,19 @@ function drawCandleChart() {
     }
 
     if (typeof LightweightCharts === 'undefined') {
-        console.error('❌ Библиотека не загружена!');
-        container.innerHTML = '<div style="color:#ef4444;padding:20px;">Ошибка: библиотека графиков не загружена</div>';
+        console.warn('⏳ Библиотека ещё не загружена');
+        container.innerHTML = '<div style="color:#94a3b8;padding:20px;text-align:center;">⏳ Загрузка библиотеки графиков...</div>';
+        // Пробуем загрузить снова
+        if (!window._libraryLoaded) {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.0/lightweight-charts.standalone.js';
+            script.onload = function() {
+                window._libraryLoaded = true;
+                console.log('✅ Библиотека загружена (принудительно)');
+                drawCandleChart();
+            };
+            document.head.appendChild(script);
+        }
         return;
     }
 
@@ -34,7 +55,7 @@ function drawCandleChart() {
     const data = getCandleData(instrument);
 
     if (data.length === 0) {
-        container.innerHTML = '<div style="color:#64748b;padding:20px;">Загрузка данных...</div>';
+        container.innerHTML = '<div style="color:#64748b;padding:20px;text-align:center;">⏳ Загрузка данных...</div>';
         return;
     }
 
@@ -139,7 +160,25 @@ function drawCandleChart() {
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval / 60) + 'ч';
 }
 
-// ===== ЦЕНТРИРОВАНИЕ =====
+// ============================================================
+//  ПОЛУЧЕНИЕ ДАННЫХ
+// ============================================================
+
+function getCandleData(instrument) {
+    const candles = STATE.candles[instrument] || [];
+    return candles.map(c => ({
+        time: Math.floor(c.time / 1000),
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+    }));
+}
+
+// ============================================================
+//  ЦЕНТРИРОВАНИЕ
+// ============================================================
+
 function centerChart() {
     if (chartInstance && candlestickSeries) {
         chartInstance.timeScale().fitContent();
@@ -154,7 +193,10 @@ function centerChart() {
     }
 }
 
-// ===== ВЕРТИКАЛЬНЫЙ ЗУМ =====
+// ============================================================
+//  ВЕРТИКАЛЬНЫЙ ЗУМ
+// ============================================================
+
 function zoomVertical(factor) {
     if (!chartInstance || !priceScaleRef) return;
     
@@ -174,7 +216,10 @@ function zoomVertical(factor) {
     });
 }
 
-// ===== СБРОС ЗУМА =====
+// ============================================================
+//  СБРОС ЗУМА
+// ============================================================
+
 function resetZoom() {
     if (!chartInstance) return;
     if (priceScaleRef) {
@@ -188,7 +233,10 @@ function resetZoom() {
     chartInstance.timeScale().fitContent();
 }
 
-// ===== ЗАГРУЗКА СВЕЧЕЙ =====
+// ============================================================
+//  ЗАГРУЗКА СВЕЧЕЙ
+// ============================================================
+
 async function loadMinuteCandles(instrument = 'RTS') {
     const candles = await fetchMinuteCandles(instrument);
     if (candles && candles.length > 10) {
@@ -209,10 +257,13 @@ async function loadMinuteCandles(instrument = 'RTS') {
             STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
         }
     }
-    drawCandleChart();
+    safeDrawCandleChart();
 }
 
-// ===== ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА =====
+// ============================================================
+//  ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА
+// ============================================================
+
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
@@ -221,10 +272,13 @@ window.switchInstrument = async function(instrument) {
     if (STATE.minuteCandles[instrument].length === 0) {
         await loadMinuteCandles(instrument);
     }
-    drawCandleChart();
+    safeDrawCandleChart();
 };
 
-// ===== ОБНОВЛЕНИЕ ТАЙМФРЕЙМА =====
+// ============================================================
+//  ОБНОВЛЕНИЕ ТАЙМФРЕЙМА
+// ============================================================
+
 function updateTimeframe(interval) {
     STATE.interval = interval;
     const inst = STATE.currentInstrument || 'RTS';
@@ -237,10 +291,13 @@ function updateTimeframe(interval) {
             STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
         }
     }
-    drawCandleChart();
+    safeDrawCandleChart();
 }
 
-// ===== НАСТРОЙКА УПРАВЛЕНИЯ =====
+// ============================================================
+//  НАСТРОЙКА УПРАВЛЕНИЯ
+// ============================================================
+
 function setupChartControls() {
     // Кнопки таймфрейма
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
@@ -287,55 +344,17 @@ function setupChartControls() {
     console.log('✅ Управление графиком настроено');
 }
 
-// ===== АГРЕГАЦИЯ СВЕЧЕЙ =====
-function aggregateCandles(minuteCandles, intervalMinutes) {
-    if (intervalMinutes === 1 || !minuteCandles || minuteCandles.length === 0) {
-        return minuteCandles;
-    }
-    
-    const result = [];
-    let current = null;
-    let count = 0;
-    
-    for (const candle of minuteCandles) {
-        if (!current) {
-            current = {
-                time: candle.time,
-                open: candle.open,
-                high: candle.high,
-                low: candle.low,
-                close: candle.close,
-            };
-            count = 1;
-        } else {
-            current.high = Math.max(current.high, candle.high);
-            current.low = Math.min(current.low, candle.low);
-            current.close = candle.close;
-            count++;
-        }
-        
-        if (count >= intervalMinutes) {
-            result.push({ ...current });
-            current = null;
-            count = 0;
-        }
-    }
-    
-    if (current) {
-        result.push(current);
-    }
-    
-    return result;
-}
+// ============================================================
+//  ЭКСПОРТ
+// ============================================================
 
-// Экспортируем
 window.drawCandleChart = drawCandleChart;
+window.safeDrawCandleChart = safeDrawCandleChart;
 window.loadMinuteCandles = loadMinuteCandles;
 window.setupChartControls = setupChartControls;
 window.updateTimeframe = updateTimeframe;
 window.centerChart = centerChart;
 window.zoomVertical = zoomVertical;
 window.resetZoom = resetZoom;
-window.aggregateCandles = aggregateCandles;
 
 console.log('📊 chart-loader.js загружен');
