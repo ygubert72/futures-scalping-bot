@@ -1,5 +1,5 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts) — ПОЛНАЯ ВЕРСИЯ
+//  ГРАФИК (lightweight-charts) — ПОЛНАЯ ВЕРСИЯ С ПЛАВНЫМ ЗУМОМ
 // ============================================================
 
 let chartInstance = null;
@@ -7,17 +7,33 @@ let candlestickSeries = null;
 let priceScaleRef = null;
 
 // ============================================================
+//  ПОЛУЧЕНИЕ БИБЛИОТЕКИ
+// ============================================================
+
+function getLibrary() {
+    if (typeof LightweightCharts !== 'undefined') return LightweightCharts;
+    if (typeof window.LightweightCharts !== 'undefined') return window.LightweightCharts;
+    if (typeof window.lightweightCharts !== 'undefined') return window.lightweightCharts;
+    if (typeof LW !== 'undefined') return LW;
+    return null;
+}
+
+function isLibraryLoaded() {
+    return getLibrary() !== null;
+}
+
+// ============================================================
 //  БЕЗОПАСНАЯ ОТРИСОВКА
 // ============================================================
 
 function safeDrawCandleChart() {
-    if (typeof LightweightCharts !== 'undefined') {
+    const lib = getLibrary();
+    if (lib) {
         window._libraryLoaded = true;
         drawCandleChart();
         return true;
     } else {
         console.warn('⏳ Библиотека не загружена, откладываем отрисовку');
-        // Сохраняем вызов для повторной попытки
         window._pendingDraw = drawCandleChart;
         return false;
     }
@@ -34,20 +50,10 @@ function drawCandleChart() {
         return;
     }
 
-    if (typeof LightweightCharts === 'undefined') {
+    const lib = getLibrary();
+    if (!lib) {
         console.warn('⏳ Библиотека ещё не загружена');
         container.innerHTML = '<div style="color:#94a3b8;padding:20px;text-align:center;">⏳ Загрузка библиотеки графиков...</div>';
-        // Пробуем загрузить снова
-        if (!window._libraryLoaded) {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.0/lightweight-charts.standalone.js';
-            script.onload = function() {
-                window._libraryLoaded = true;
-                console.log('✅ Библиотека загружена (принудительно)');
-                drawCandleChart();
-            };
-            document.head.appendChild(script);
-        }
         return;
     }
 
@@ -66,7 +72,7 @@ function drawCandleChart() {
     if (!chartInstance) {
         container.innerHTML = '';
         
-        chartInstance = LightweightCharts.createChart(container, {
+        chartInstance = lib.createChart(container, {
             width: containerWidth,
             height: containerHeight,
             layout: { 
@@ -194,7 +200,7 @@ function centerChart() {
 }
 
 // ============================================================
-//  ВЕРТИКАЛЬНЫЙ ЗУМ
+//  ВЕРТИКАЛЬНЫЙ ЗУМ (ПЛАВНЫЙ)
 // ============================================================
 
 function zoomVertical(factor) {
@@ -202,17 +208,46 @@ function zoomVertical(factor) {
     
     const currentMargins = priceScaleRef.options().scaleMargins || { top: 0.10, bottom: 0.10 };
     
+    // Плавное изменение с ограничениями
     let newTop = currentMargins.top * factor;
     let newBottom = currentMargins.bottom * factor;
     
-    newTop = Math.max(0.01, Math.min(0.40, newTop));
-    newBottom = Math.max(0.01, Math.min(0.40, newBottom));
+    // Ограничиваем, чтобы график не улетал
+    newTop = Math.max(0.02, Math.min(0.40, newTop));
+    newBottom = Math.max(0.02, Math.min(0.40, newBottom));
     
-    priceScaleRef.applyOptions({
-        scaleMargins: {
-            top: newTop,
-            bottom: newBottom,
-        },
+    // Применяем с задержкой для плавности
+    requestAnimationFrame(() => {
+        priceScaleRef.applyOptions({
+            scaleMargins: {
+                top: newTop,
+                bottom: newBottom,
+            },
+        });
+    });
+}
+
+// ============================================================
+//  ГОРИЗОНТАЛЬНЫЙ ЗУМ (ПЛАВНЫЙ)
+// ============================================================
+
+function zoomHorizontal(factor) {
+    if (!chartInstance) return;
+    const timeScale = chartInstance.timeScale();
+    const currentRange = timeScale.getVisibleRange();
+    if (!currentRange) return;
+    
+    const from = currentRange.from;
+    const to = currentRange.to;
+    const mid = (from + to) / 2;
+    const halfRange = (to - from) / 2 * factor;
+    
+    // Плавное применение
+    requestAnimationFrame(() => {
+        timeScale.setVisibleRange({
+            from: mid - halfRange,
+            to: mid + halfRange,
+        });
     });
 }
 
@@ -295,7 +330,7 @@ function updateTimeframe(interval) {
 }
 
 // ============================================================
-//  НАСТРОЙКА УПРАВЛЕНИЯ
+//  НАСТРОЙКА УПРАВЛЕНИЯ (С ПЛАВНЫМ ЗУМОМ)
 // ============================================================
 
 function setupChartControls() {
@@ -308,24 +343,44 @@ function setupChartControls() {
         });
     });
     
-    // Вертикальный зум
+    // Вертикальный зум (плавный)
     document.getElementById('zoomInV')?.addEventListener('click', () => {
-        zoomVertical(0.7);
+        zoomVertical(0.75);
     });
     document.getElementById('zoomOutV')?.addEventListener('click', () => {
-        zoomVertical(1.3);
+        zoomVertical(1.25);
     });
     document.getElementById('zoomResetV')?.addEventListener('click', resetZoom);
     
-    // Обработчик колесика мыши
+    // Обработчик колесика мыши (оптимизированный)
     const container = document.getElementById('chart-container');
     if (container) {
+        let wheelTimeout = null;
         container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            // Если зажат Ctrl — вертикальный зум
             if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                const factor = e.deltaY > 0 ? 1.3 : 0.7;
+                const factor = e.deltaY > 0 ? 1.1 : 0.9;
                 zoomVertical(factor);
+                return;
             }
+            
+            // Горизонтальный зум через timeScale (с задержкой для плавности)
+            clearTimeout(wheelTimeout);
+            wheelTimeout = setTimeout(() => {
+                const timeScale = chartInstance?.timeScale();
+                if (timeScale) {
+                    const range = timeScale.getVisibleRange();
+                    if (range) {
+                        const width = range.to - range.from;
+                        if (width < 5) {
+                            setTimeout(centerChart, 50);
+                        }
+                    }
+                }
+            }, 50);
+            
         }, { passive: false });
     }
     
@@ -341,7 +396,7 @@ function setupChartControls() {
         controls.appendChild(centerBtn);
     }
     
-    console.log('✅ Управление графиком настроено');
+    console.log('✅ Управление графиком настроено (плавный зум)');
 }
 
 // ============================================================
@@ -355,6 +410,9 @@ window.setupChartControls = setupChartControls;
 window.updateTimeframe = updateTimeframe;
 window.centerChart = centerChart;
 window.zoomVertical = zoomVertical;
+window.zoomHorizontal = zoomHorizontal;
 window.resetZoom = resetZoom;
+window.getLibrary = getLibrary;
+window.isLibraryLoaded = isLibraryLoaded;
 
-console.log('📊 chart-loader.js загружен');
+console.log('📊 chart-loader.js загружен (с плавным зумом)');
