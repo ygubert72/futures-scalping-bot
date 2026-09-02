@@ -1,5 +1,5 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts) — С ПЛАВНЫМ ЗУМОМ
+//  ГРАФИК (lightweight-charts) — БЕЗ АВТО-МАСШТАБИРОВАНИЯ
 // ============================================================
 
 let chartInstance = null;
@@ -97,7 +97,7 @@ function drawCandleChart() {
                     top: 0.10,
                     bottom: 0.10,
                 },
-                autoScale: true,
+                autoScale: false,  // <--- ОТКЛЮЧАЕМ АВТО-МАСШТАБИРОВАНИЕ
             },
             handleScroll: {
                 mouseWheel: true,
@@ -143,7 +143,7 @@ function drawCandleChart() {
         resizeObserver.observe(container);
         window._resizeObserver = resizeObserver;
         
-        console.log('✅ График создан');
+        console.log('✅ График создан (авто-масштабирование ОТКЛЮЧЕНО)');
     }
 
     // --- ОБНОВЛЕНИЕ ДАННЫХ ---
@@ -332,7 +332,7 @@ function setupChartControls() {
     });
     document.getElementById('zoomResetV')?.addEventListener('click', resetZoom);
     
-    // ===== ПЛАВНЫЙ ЗУМ КОЛЕСИКОМ =====
+    // ПЛАВНЫЙ ЗУМ КОЛЕСИКОМ
     const container = document.getElementById('chart-container');
     if (container) {
         let accumulatedDelta = 0;
@@ -389,7 +389,7 @@ function setupChartControls() {
         controls.appendChild(centerBtn);
     }
     
-    console.log('✅ Управление графиком настроено (ПЛАВНЫЙ зум)');
+    console.log('✅ Управление графиком настроено (ПЛАВНЫЙ зум, авто-масштабирование ОТКЛЮЧЕНО)');
 }
 
 // ============================================================
@@ -407,4 +407,4 @@ window.resetZoom = resetZoom;
 window.getLibrary = getLibrary;
 window.isLibraryLoaded = isLibraryLoaded;
 
-console.log('📊 chart-loader.js загружен (с плавным зумом)');
+console.log('📊 chart-loader.js загружен (БЕЗ авто-масштабирования)');
