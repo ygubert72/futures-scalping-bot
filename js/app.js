@@ -22,6 +22,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Отрисовываем интерфейс
     render();
     
+    // Центрируем график после загрузки
+    setTimeout(() => {
+        if (typeof centerChart === 'function') {
+            centerChart();
+        }
+    }, 500);
+    
     // ============================================================
     //  ЦИКЛ ОБНОВЛЕНИЯ
     // ============================================================
@@ -88,5 +95,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('exportBtn').addEventListener('click', exportToExcel);
     
     // Обновление графика при ресайзе
-    window.addEventListener('resize', drawCandleChart);
+    window.addEventListener('resize', () => {
+        if (typeof drawCandleChart === 'function') {
+            drawCandleChart();
+        }
+    });
 });
