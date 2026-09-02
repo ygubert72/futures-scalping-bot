@@ -2,7 +2,7 @@
 //  ЗАПУСК ПРИЛОЖЕНИЯ (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 // ============================================================
 
-document.addEventListener('DOMContentLoaded', async () => {.
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 Запуск приложения...');
     
     // 1. Определяем инструменты
