@@ -1,5 +1,5 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts) — ПОЛНАЯ ВЕРСИЯ С ПЛАВНЫМ ЗУМОМ
+//  ГРАФИК (lightweight-charts) — С ПЛАВНЫМ ЗУМОМ
 // ============================================================
 
 let chartInstance = null;
@@ -206,49 +206,29 @@ function centerChart() {
 function zoomVertical(factor) {
     if (!chartInstance || !priceScaleRef) return;
     
-    const currentMargins = priceScaleRef.options().scaleMargins || { top: 0.10, bottom: 0.10 };
+    let currentMargins;
+    try {
+        currentMargins = priceScaleRef.options().scaleMargins || { top: 0.10, bottom: 0.10 };
+    } catch (e) {
+        currentMargins = { top: 0.10, bottom: 0.10 };
+    }
     
-    // Плавное изменение с ограничениями
     let newTop = currentMargins.top * factor;
     let newBottom = currentMargins.bottom * factor;
     
-    // Ограничиваем, чтобы график не улетал
-    newTop = Math.max(0.02, Math.min(0.40, newTop));
-    newBottom = Math.max(0.02, Math.min(0.40, newBottom));
+    newTop = Math.max(0.01, Math.min(0.45, newTop));
+    newBottom = Math.max(0.01, Math.min(0.45, newBottom));
     
-    // Применяем с задержкой для плавности
-    requestAnimationFrame(() => {
+    try {
         priceScaleRef.applyOptions({
             scaleMargins: {
                 top: newTop,
                 bottom: newBottom,
             },
         });
-    });
-}
-
-// ============================================================
-//  ГОРИЗОНТАЛЬНЫЙ ЗУМ (ПЛАВНЫЙ)
-// ============================================================
-
-function zoomHorizontal(factor) {
-    if (!chartInstance) return;
-    const timeScale = chartInstance.timeScale();
-    const currentRange = timeScale.getVisibleRange();
-    if (!currentRange) return;
-    
-    const from = currentRange.from;
-    const to = currentRange.to;
-    const mid = (from + to) / 2;
-    const halfRange = (to - from) / 2 * factor;
-    
-    // Плавное применение
-    requestAnimationFrame(() => {
-        timeScale.setVisibleRange({
-            from: mid - halfRange,
-            to: mid + halfRange,
-        });
-    });
+    } catch (e) {
+        console.warn('Ошибка применения зума:', e);
+    }
 }
 
 // ============================================================
@@ -343,32 +323,45 @@ function setupChartControls() {
         });
     });
     
-    // Вертикальный зум (плавный)
+    // Вертикальный зум
     document.getElementById('zoomInV')?.addEventListener('click', () => {
-        zoomVertical(0.75);
+        zoomVertical(0.7);
     });
     document.getElementById('zoomOutV')?.addEventListener('click', () => {
-        zoomVertical(1.25);
+        zoomVertical(1.3);
     });
     document.getElementById('zoomResetV')?.addEventListener('click', resetZoom);
     
-    // Обработчик колесика мыши (оптимизированный)
+    // ===== ПЛАВНЫЙ ЗУМ КОЛЕСИКОМ =====
     const container = document.getElementById('chart-container');
     if (container) {
-        let wheelTimeout = null;
+        let accumulatedDelta = 0;
+        let zoomTimeout = null;
+        const ZOOM_THRESHOLD = 0.3;
+        
         container.addEventListener('wheel', (e) => {
             e.preventDefault();
             
-            // Если зажат Ctrl — вертикальный зум
             if (e.ctrlKey || e.metaKey) {
-                const factor = e.deltaY > 0 ? 1.1 : 0.9;
-                zoomVertical(factor);
+                accumulatedDelta += e.deltaY;
+                
+                clearTimeout(zoomTimeout);
+                
+                if (Math.abs(accumulatedDelta) >= ZOOM_THRESHOLD) {
+                    const factor = accumulatedDelta > 0 ? 1.05 : 0.95;
+                    zoomVertical(factor);
+                    accumulatedDelta = 0;
+                }
+                
+                zoomTimeout = setTimeout(() => {
+                    accumulatedDelta = 0;
+                }, 150);
+                
                 return;
             }
             
-            // Горизонтальный зум через timeScale (с задержкой для плавности)
-            clearTimeout(wheelTimeout);
-            wheelTimeout = setTimeout(() => {
+            clearTimeout(zoomTimeout);
+            zoomTimeout = setTimeout(() => {
                 const timeScale = chartInstance?.timeScale();
                 if (timeScale) {
                     const range = timeScale.getVisibleRange();
@@ -396,7 +389,7 @@ function setupChartControls() {
         controls.appendChild(centerBtn);
     }
     
-    console.log('✅ Управление графиком настроено (плавный зум)');
+    console.log('✅ Управление графиком настроено (ПЛАВНЫЙ зум)');
 }
 
 // ============================================================
@@ -410,7 +403,6 @@ window.setupChartControls = setupChartControls;
 window.updateTimeframe = updateTimeframe;
 window.centerChart = centerChart;
 window.zoomVertical = zoomVertical;
-window.zoomHorizontal = zoomHorizontal;
 window.resetZoom = resetZoom;
 window.getLibrary = getLibrary;
 window.isLibraryLoaded = isLibraryLoaded;
