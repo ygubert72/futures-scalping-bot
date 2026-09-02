@@ -101,8 +101,8 @@
         </div>
     </div>
 
-    <!-- ===== ЗАГРУЗКА БИБЛИОТЕКИ (РАБОЧАЯ ССЫЛКА) ===== -->
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.js">
+    <!-- ===== ПРАВИЛЬНАЯ ЗАГРУЗКА БИБЛИОТЕКИ (unpkg) ===== -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js">
     </script>
 
     <!-- ===== ПОДКЛЮЧАЕМ ВСЕ СКРИПТЫ ===== -->
@@ -117,7 +117,8 @@
     <!-- ===== ПРОВЕРКА ЗАГРУЗКИ ===== -->
     <script>
     (function ensureLibrary() {
-        if (typeof LightweightCharts !== 'undefined') {
+        var lib = window.LightweightCharts || window.lightweightCharts || window.LW;
+        if (lib) {
             window._libraryLoaded = true;
             console.log('✅ Библиотека LightweightCharts загружена!');
             if (window._pendingDraw) {
@@ -126,6 +127,9 @@
             }
             if (typeof drawCandleChart === 'function') {
                 setTimeout(drawCandleChart, 100);
+            }
+            if (typeof render === 'function') {
+                setTimeout(render, 200);
             }
         } else {
             console.log('⏳ Ожидание загрузки библиотеки...');
