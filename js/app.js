@@ -1,5 +1,5 @@
 // ============================================================
-//  ЗАПУСК ПРИЛОЖЕНИЯ
+//  ЗАПУСК ПРИЛОЖЕНИЯ (ИСПРАВЛЕННЫЙ)
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -10,8 +10,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Настраиваем управление графиком
     setupChartControls();
     
-    // Загружаем свечи для RTS
+    // ===== ЗАГРУЖАЕМ ОБА ИНСТРУМЕНТА =====
+    console.log('🔄 Загрузка данных для RTS...');
     await loadMinuteCandles('RTS');
+    
+    console.log('🔄 Загрузка данных для Si...');
+    await loadMinuteCandles('Si');
     
     // Получаем текущие котировки
     const rts = await fetchQuote('RTS');
@@ -46,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const si = await fetchQuote('Si');
             if (si && si.price > 0) STATE.quotes.Si = si;
             
-            // Обновляем свечи
+            // Обновляем свечи для текущего инструмента
             const minuteCandles = STATE.minuteCandles[inst];
             if (minuteCandles && minuteCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
                 const last = minuteCandles[minuteCandles.length-1];
