@@ -71,6 +71,21 @@
                         </div>
                         <div id="strategyStatus" style="font-size:11px;color:#94a3b8;">⏸ Остановлены</div>
                     </div>
+
+                    <!-- ОТКРЫТЫЕ ПОЗИЦИИ -->
+                    <div class="card" style="flex-shrink:0;">
+                        <div class="card-title">📌 ОТКРЫТЫЕ ПОЗИЦИИ</div>
+                        <div class="trades-table" style="max-height:120px;">
+                            <div class="scroll">
+                                <table>
+                                    <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Вход</th><th>Текущая</th><th style="text-align:right;">P&L</th></tr></thead>
+                                    <tbody id="openPositionsBody">
+                                        <tr><td colspan="6" style="text-align:center;color:#475569;padding:10px 0;">Нет открытых позиций</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">📊 СТАТИСТИКА</div>
@@ -83,14 +98,15 @@
                         <button id="exportBtn" class="export-btn">📥 Экспорт отчёта (Excel)</button>
                     </div>
                     
+                    <!-- ЗАКРЫТЫЕ СДЕЛКИ -->
                     <div class="card" style="flex:1;min-height:0;">
-                        <div class="card-title">📋 СДЕЛКИ</div>
+                        <div class="card-title">📋 ЗАКРЫТЫЕ СДЕЛКИ</div>
                         <div class="trades-table">
                             <div class="scroll">
                                 <table>
                                     <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Цена</th><th style="text-align:right;">P&L</th></tr></thead>
                                     <tbody id="tradesBody">
-                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок</td></tr>
+                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет закрытых сделок</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -105,7 +121,7 @@
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js">
     </script>
 
-    <!-- ===== ПОДКЛЮЧАЕМ СКРИПТЫ (ПРАВИЛЬНЫЙ ПОРЯДОК) ===== -->
+    <!-- ===== ПОДКЛЮЧАЕМ СКРИПТЫ ===== -->
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
     <script src="js/trading.js"></script>
