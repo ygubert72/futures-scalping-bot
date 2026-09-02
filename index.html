@@ -48,7 +48,7 @@
                             </div>
                         </div>
                     </div>
-                    <div id="chart-container" style="height:500px; width:100%;">
+                    <div id="chart-container" style="height:500px; width:100%; min-height:300px;">
                         <div style="color:#64748b;padding:20px;text-align:center;">⏳ Загрузка графика...</div>
                     </div>
                     <div style="display:flex;justify-content:space-between;flex-shrink:0;padding-top:4px;">
@@ -101,11 +101,11 @@
         </div>
     </div>
 
-    <!-- ===== ПРАВИЛЬНАЯ ЗАГРУЗКА БИБЛИОТЕКИ (unpkg) ===== -->
+    <!-- ===== ЗАГРУЗКА БИБЛИОТЕКИ ===== -->
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js">
     </script>
 
-    <!-- ===== ПОДКЛЮЧАЕМ ВСЕ СКРИПТЫ ===== -->
+    <!-- ===== ПОДКЛЮЧАЕМ СКРИПТЫ (ПРАВИЛЬНЫЙ ПОРЯДОК) ===== -->
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
     <script src="js/trading.js"></script>
@@ -125,8 +125,8 @@
                 window._pendingDraw();
                 window._pendingDraw = null;
             }
-            if (typeof drawCandleChart === 'function') {
-                setTimeout(drawCandleChart, 100);
+            if (typeof safeDrawCandleChart === 'function') {
+                setTimeout(safeDrawCandleChart, 100);
             }
             if (typeof render === 'function') {
                 setTimeout(render, 200);
