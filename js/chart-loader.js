@@ -1,12 +1,11 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts) — ПОЛНАЯ ПЕРЕРАБОТАННАЯ ВЕРСИЯ
+//  ГРАФИК (lightweight-charts) — ФИКСАЦИЯ ПРАВОГО КРАЯ
 // ============================================================
 
 let chartInstance = null;
 let candlestickSeries = null;
 let priceScaleRef = null;
 let _resizeObserver = null;
-let isInitialized = false;
 
 // ============================================================
 //  ПОЛУЧЕНИЕ БИБЛИОТЕКИ
@@ -42,7 +41,7 @@ function safeDrawCandleChart() {
 }
 
 // ============================================================
-//  ОСНОВНАЯ ФУНКЦИЯ ОТРИСОВКИ (ПЕРЕРАБОТАННАЯ)
+//  ОСНОВНАЯ ФУНКЦИЯ ОТРИСОВКИ (С ФИКСАЦИЕЙ ПРАВОГО КРАЯ)
 // ============================================================
 
 function drawCandleChart() {
@@ -67,17 +66,13 @@ function drawCandleChart() {
         return;
     }
 
-    // Получаем размеры контейнера
-    const containerRect = container.getBoundingClientRect();
-    const containerWidth = containerRect.width || container.clientWidth || 600;
-    const containerHeight = containerRect.height || container.clientHeight || 500;
+    const containerWidth = container.clientWidth || 600;
+    const containerHeight = container.clientHeight || 500;
 
     // --- СОЗДАНИЕ ГРАФИКА ---
     if (!chartInstance) {
-        // Очищаем контейнер
         container.innerHTML = '';
         
-        // Создаем график с правильными настройками
         chartInstance = lib.createChart(container, {
             width: containerWidth,
             height: containerHeight,
@@ -93,10 +88,11 @@ function drawCandleChart() {
                 timeVisible: true, 
                 secondsVisible: false, 
                 borderColor: '#1e293b',
-                fixLeftEdge: true,
-                fixRightEdge: true,
+                // ===== ГЛАВНОЕ: ФИКСИРУЕМ ПРАВЫЙ КРАЙ =====
+                fixLeftEdge: false,   // Отключаем фиксацию левого края
+                fixRightEdge: true,   // ВКЛЮЧАЕМ фиксацию правого края — график всегда показывает последнюю свечу!
                 minBarSpacing: 0.5,
-                rightOffset: 5,  // Отступ справа для видимости последней свечи
+                rightOffset: 10,      // Отступ справа для видимости последней свечи
             },
             rightPriceScale: { 
                 borderColor: '#1e293b',
@@ -105,7 +101,6 @@ function drawCandleChart() {
                     bottom: 0.10,
                 },
                 autoScale: false,
-                mode: 0, // Normal mode
             },
             handleScroll: {
                 mouseWheel: true,
@@ -121,10 +116,8 @@ function drawCandleChart() {
             },
         });
 
-        // Сохраняем ссылку на priceScale
         priceScaleRef = chartInstance.priceScale();
         
-        // Создаем серию свечей
         candlestickSeries = chartInstance.addCandlestickSeries({
             upColor: '#22c55e',
             downColor: '#ef4444',
@@ -150,32 +143,11 @@ function drawCandleChart() {
                     width: w,
                     height: h,
                 });
-                // Не центрируем автоматически при ресайзе
             }
         });
         _resizeObserver.observe(container);
         
-        // Обработчик изменения видимости
-        if (window.IntersectionObserver) {
-            const visibilityObserver = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting && chartInstance) {
-                        // Обновляем размер при появлении
-                        const w = container.clientWidth || 600;
-                        const h = container.clientHeight || 500;
-                        chartInstance.applyOptions({
-                            width: w,
-                            height: h,
-                        });
-                    }
-                });
-            });
-            visibilityObserver.observe(container);
-            window._visibilityObserver = visibilityObserver;
-        }
-        
-        console.log('✅ График создан');
-        isInitialized = true;
+        console.log('✅ График создан с fixRightEdge=true');
     }
 
     // --- ОБНОВЛЕНИЕ ДАННЫХ ---
@@ -183,15 +155,15 @@ function drawCandleChart() {
         try {
             candlestickSeries.setData(data);
             
-            // Центрируем график так, чтобы последняя свеча была видна
-            chartInstance.timeScale().fitContent();
-            
-            // Устанавливаем отступ справа для видимости последней свечи
+            // ===== ВАЖНО: Применяем настройки, чтобы последняя свеча всегда была видна =====
             chartInstance.timeScale().applyOptions({
-                rightOffset: 5,
+                fixRightEdge: true,
+                rightOffset: 10,
             });
             
-            // Убеждаемся, что масштаб не сбрасывается
+            // Центрируем график так, чтобы последняя свеча была справа
+            chartInstance.timeScale().fitContent();
+            
             if (priceScaleRef) {
                 priceScaleRef.applyOptions({
                     scaleMargins: {
@@ -207,7 +179,6 @@ function drawCandleChart() {
         }
     }
 
-    // Обновляем информацию
     document.getElementById('candleCount').textContent = data.length;
     document.getElementById('timeframeLabel').textContent =
         STATE.interval < 60 ? STATE.interval + 'м' : (STATE.interval / 60) + 'ч';
@@ -231,28 +202,20 @@ function getCandleData(instrument) {
 }
 
 // ============================================================
-//  ЦЕНТРИРОВАНИЕ (УЛУЧШЕННОЕ)
+//  ЦЕНТРИРОВАНИЕ (С ФИКСАЦИЕЙ ПРАВОГО КРАЯ)
 // ============================================================
 
 function centerChart() {
     if (!chartInstance || !candlestickSeries) return;
     
     try {
-        // Получаем данные
-        const data = candlestickSeries.data();
-        if (!data || data.length === 0) return;
-        
-        // Находим последнюю свечу
-        const lastCandle = data[data.length - 1];
-        if (!lastCandle) return;
-        
-        // Центрируем на последней свече с отступом
-        chartInstance.timeScale().fitContent();
+        // Применяем настройки с фиксацией правого края
         chartInstance.timeScale().applyOptions({
-            rightOffset: 5,
+            fixRightEdge: true,
+            rightOffset: 10,
         });
+        chartInstance.timeScale().fitContent();
         
-        // Сбрасываем вертикальный масштаб
         if (priceScaleRef) {
             priceScaleRef.applyOptions({
                 scaleMargins: {
@@ -262,14 +225,14 @@ function centerChart() {
             });
         }
         
-        console.log('🎯 График центрирован');
+        console.log('🎯 График центрирован (правый край зафиксирован)');
     } catch (e) {
         console.warn('Ошибка центрирования:', e);
     }
 }
 
 // ============================================================
-//  ВЕРТИКАЛЬНЫЙ ЗУМ (УЛУЧШЕННЫЙ)
+//  ВЕРТИКАЛЬНЫЙ ЗУМ
 // ============================================================
 
 function zoomVertical(factor) {
@@ -283,15 +246,12 @@ function zoomVertical(factor) {
             currentMargins = { top: 0.10, bottom: 0.10 };
         }
         
-        // Вычисляем новые маржины
         let newTop = currentMargins.top * factor;
         let newBottom = currentMargins.bottom * factor;
         
-        // Ограничиваем диапазон (не даем слишком сильно увеличивать/уменьшать)
         newTop = Math.max(0.01, Math.min(0.45, newTop));
         newBottom = Math.max(0.01, Math.min(0.45, newBottom));
         
-        // Применяем новые маржины
         priceScaleRef.applyOptions({
             scaleMargins: {
                 top: newTop,
@@ -321,10 +281,11 @@ function resetZoom() {
                 },
             });
         }
-        chartInstance.timeScale().fitContent();
         chartInstance.timeScale().applyOptions({
-            rightOffset: 5,
+            fixRightEdge: true,
+            rightOffset: 10,
         });
+        chartInstance.timeScale().fitContent();
         console.log('⟲ Зум сброшен');
     } catch (e) {
         console.warn('Ошибка сброса зума:', e);
@@ -332,69 +293,57 @@ function resetZoom() {
 }
 
 // ============================================================
-//  ЗАГРУЗКА СВЕЧЕЙ (УЛУЧШЕННАЯ)
+//  ЗАГРУЗКА СВЕЧЕЙ
 // ============================================================
 
 async function loadMinuteCandles(instrument = 'RTS') {
     console.log(`🔄 Загрузка данных для ${instrument}...`);
     
-    // 1. Пробуем загрузить с MOEX
     let candles = await fetchMinuteCandles(instrument);
     
     if (candles && candles.length > 10) {
         STATE.minuteCandles[instrument] = candles;
         console.log(`✅ Загружено ${candles.length} свечей (${instrument})`);
     } else {
-        // 2. Если MOEX не дал данные — генерируем тестовые
         const startPrice = instrument === 'RTS' ? 78000 : 88;
         candles = generateTestCandles(300, startPrice, 1);
         STATE.minuteCandles[instrument] = candles;
         console.log(`📊 Сгенерировано ${candles.length} тестовых свечей (${instrument})`);
     }
     
-    // 3. Обновляем STATE.candles из minuteCandles
     const minuteCandles = STATE.minuteCandles[instrument] || [];
     if (minuteCandles.length > 0) {
         STATE.candles[instrument] = minuteCandles.slice();
-        
-        // Ограничиваем количество для производительности
         if (STATE.candles[instrument].length > STATE.maxCandles) {
             STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
         }
-        
-        console.log(`📊 ${instrument} свечей для графика:`, STATE.candles[instrument].length);
     }
     
-    // 4. Если это текущий инструмент — перерисовываем
     if (STATE.currentInstrument === instrument) {
         drawCandleChart();
     }
 }
 
 // ============================================================
-//  ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА (УЛУЧШЕННОЕ)
+//  ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТА
 // ============================================================
 
 window.switchInstrument = async function(instrument) {
     STATE.currentInstrument = instrument;
     
-    // Обновляем кнопки
     document.getElementById('instRTS').className = 'inst-btn' + (instrument === 'RTS' ? ' active' : '');
     document.getElementById('instSi').className = 'inst-btn' + (instrument === 'Si' ? ' active' : '');
     document.getElementById('chartTitle').textContent = '📈 ГРАФИК ' + instrument;
     
-    // Проверяем, есть ли данные для этого инструмента
     if (!STATE.minuteCandles[instrument] || STATE.minuteCandles[instrument].length === 0) {
         await loadMinuteCandles(instrument);
     } else {
-        // Данные есть — обновляем STATE.candles из minuteCandles
         const minuteCandles = STATE.minuteCandles[instrument] || [];
         if (minuteCandles.length > 0) {
             STATE.candles[instrument] = minuteCandles.slice();
             if (STATE.candles[instrument].length > STATE.maxCandles) {
                 STATE.candles[instrument] = STATE.candles[instrument].slice(-STATE.maxCandles);
             }
-            console.log(`📊 ${instrument} свечей для графика:`, STATE.candles[instrument].length);
         }
     }
     
@@ -402,7 +351,7 @@ window.switchInstrument = async function(instrument) {
 };
 
 // ============================================================
-//  ОБНОВЛЕНИЕ ТАЙМФРЕЙМА (УЛУЧШЕННОЕ)
+//  ОБНОВЛЕНИЕ ТАЙМФРЕЙМА
 // ============================================================
 
 function updateTimeframe(interval) {
@@ -416,23 +365,19 @@ function updateTimeframe(interval) {
         } else {
             STATE.candles[inst] = aggregateCandles(minuteCandles, interval);
         }
-        
         if (STATE.candles[inst].length > STATE.maxCandles) {
             STATE.candles[inst] = STATE.candles[inst].slice(-STATE.maxCandles);
         }
-        
-        console.log(`📊 ${inst} свечей для графика (таймфрейм ${interval}м):`, STATE.candles[inst].length);
     }
     
     drawCandleChart();
 }
 
 // ============================================================
-//  НАСТРОЙКА УПРАВЛЕНИЯ (УЛУЧШЕННАЯ)
+//  НАСТРОЙКА УПРАВЛЕНИЯ
 // ============================================================
 
 function setupChartControls() {
-    // Кнопки таймфрейма
     document.querySelectorAll('#timeframeControls button[data-interval]').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('#timeframeControls button[data-interval]').forEach(b => b.classList.remove('active'));
@@ -441,7 +386,6 @@ function setupChartControls() {
         });
     });
     
-    // Вертикальный зум
     document.getElementById('zoomInV')?.addEventListener('click', () => {
         zoomVertical(0.7);
     });
@@ -450,16 +394,12 @@ function setupChartControls() {
     });
     document.getElementById('zoomResetV')?.addEventListener('click', resetZoom);
     
-    // Зум колесиком (улучшенный)
     const container = document.getElementById('chart-container');
     if (container) {
-        // Удаляем старые обработчики
         container.removeEventListener('wheel', handleWheel);
         container.addEventListener('wheel', handleWheel, { passive: false });
-        console.log('✅ Обработчик колесика добавлен');
     }
     
-    // Добавляем кнопку центрирования
     const controls = document.getElementById('timeframeControls');
     if (controls) {
         let centerBtn = document.getElementById('centerChart');
@@ -476,10 +416,6 @@ function setupChartControls() {
     
     console.log('✅ Управление графиком настроено');
 }
-
-// ============================================================
-//  ОБРАБОТЧИК КОЛЕСИКА (ВЫНЕСЕН В ОТДЕЛЬНУЮ ФУНКЦИЮ)
-// ============================================================
 
 let accumulatedDelta = 0;
 let zoomTimeout = null;
@@ -520,4 +456,4 @@ window.resetZoom = resetZoom;
 window.getLibrary = getLibrary;
 window.isLibraryLoaded = isLibraryLoaded;
 
-console.log('📊 chart-loader.js загружен (ПОЛНАЯ ПЕРЕРАБОТАННАЯ ВЕРСИЯ)');
+console.log('📊 chart-loader.js загружен (ФИКСАЦИЯ ПРАВОГО КРАЯ)');
