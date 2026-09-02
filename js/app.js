@@ -1,5 +1,5 @@
 // ============================================================
-//  ЗАПУСК ПРИЛОЖЕНИЯ (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+//  ЗАПУСК ПРИЛОЖЕНИЯ (ПОЛНАЯ ВЕРСИЯ С ТЕСТОВЫМ РЕЖИМОМ)
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -57,10 +57,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============================================================
-//  ЦИКЛ ОБНОВЛЕНИЯ
+//  ЦИКЛ ОБНОВЛЕНИЯ (С ТЕСТОВЫМ РЕЖИМОМ)
 // ============================================================
 
 let updateInterval = null;
+let testMode = true; // Включаем тестовый режим для демонстрации
 
 function startUpdateLoop() {
     if (updateInterval) {
@@ -71,38 +72,77 @@ function startUpdateLoop() {
         try {
             const inst = STATE.currentInstrument || 'RTS';
             
-            // Обновляем котировки
-            const rts = await fetchQuote('RTS');
-            if (rts && rts.price > 0) STATE.quotes.RTS = rts;
+            // === 1. ПОЛУЧАЕМ РЕАЛЬНЫЕ КОТИРОВКИ ===
+            let rts = await fetchQuote('RTS');
+            let si = await fetchQuote('Si');
             
-            const si = await fetchQuote('Si');
+            // === 2. ЕСЛИ ЦЕНЫ НЕ МЕНЯЮТСЯ — ДОБАВЛЯЕМ ТЕСТОВОЕ ДВИЖЕНИЕ ===
+            if (testMode) {
+                // Базовые цены (последние реальные)
+                const baseRts = rts?.price || 80040;
+                const baseSi = si?.price || 89974;
+                
+                // Добавляем случайное движение (как на реальном рынке)
+                const rtsDelta = (Math.random() - 0.5) * 60; // ±30 пунктов
+                const siDelta = (Math.random() - 0.5) * 30;  // ±15 пунктов
+                
+                // Обновляем цены
+                if (rts) {
+                    rts.price = Math.round((baseRts + rtsDelta) * 100) / 100;
+                    rts.change = ((rts.price - (rts.open || baseRts)) / (rts.open || baseRts) * 100);
+                }
+                if (si) {
+                    si.price = Math.round((baseSi + siDelta) * 100) / 100;
+                    si.change = ((si.price - (si.open || baseSi)) / (si.open || baseSi) * 100);
+                }
+            }
+            
+            // Обновляем STATE
+            if (rts && rts.price > 0) STATE.quotes.RTS = rts;
             if (si && si.price > 0) STATE.quotes.Si = si;
             
-            // Обновляем свечи для текущего инструмента
+            // === 3. ОБНОВЛЯЕМ СВЕЧИ ===
             const minuteCandles = STATE.minuteCandles[inst];
             if (minuteCandles && minuteCandles.length > 0 && STATE.quotes[inst]?.price > 0) {
                 const last = minuteCandles[minuteCandles.length - 1];
                 const now = Date.now();
                 const price = STATE.quotes[inst].price;
                 
-                if (last && now - last.time > 120000) {
-                    // Новая свеча
-                    const newCandle = {
-                        time: now - (now % 60000),
-                        open: price,
-                        high: price,
-                        low: price,
-                        close: price,
-                    };
-                    minuteCandles.push(newCandle);
-                    if (minuteCandles.length > 2000) {
-                        STATE.minuteCandles[inst] = minuteCandles.slice(-1500);
+                // Проверяем, нужно ли создать новую свечу
+                const timeSinceLastCandle = now - last.time;
+                const shouldCreateNewCandle = timeSinceLastCandle > 120000;
+                
+                if (shouldCreateNewCandle) {
+                    // Создаем новую свечу
+                    const newTime = now - (now % 60000);
+                    const existingCandle = minuteCandles.find(c => 
+                        Math.abs(c.time - newTime) < 1000
+                    );
+                    
+                    if (!existingCandle) {
+                        const newCandle = {
+                            time: newTime,
+                            open: price,
+                            high: price,
+                            low: price,
+                            close: price,
+                        };
+                        minuteCandles.push(newCandle);
+                    } else {
+                        existingCandle.close = price;
+                        if (price > existingCandle.high) existingCandle.high = price;
+                        if (price < existingCandle.low) existingCandle.low = price;
                     }
                 } else if (last) {
                     // Обновляем текущую свечу
                     last.close = price;
                     if (price > last.high) last.high = price;
                     if (price < last.low) last.low = price;
+                }
+                
+                // Ограничиваем количество свечей
+                if (minuteCandles.length > 2000) {
+                    STATE.minuteCandles[inst] = minuteCandles.slice(-1500);
                 }
                 
                 // Обновляем агрегированные свечи
@@ -135,6 +175,16 @@ function startUpdateLoop() {
 }
 
 // ============================================================
+//  УПРАВЛЕНИЕ ТЕСТОВЫМ РЕЖИМОМ
+// ============================================================
+
+function toggleTestMode() {
+    testMode = !testMode;
+    console.log(`🧪 Тестовый режим: ${testMode ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`);
+    return testMode;
+}
+
+// ============================================================
 //  ОСТАНОВКА ОБНОВЛЕНИЙ
 // ============================================================
 
@@ -146,8 +196,14 @@ function stopUpdateLoop() {
     }
 }
 
-// Экспортируем для возможности остановки
+// ============================================================
+//  ЭКСПОРТ
+// ============================================================
+
+window.toggleTestMode = toggleTestMode;
 window.stopUpdateLoop = stopUpdateLoop;
 window.startUpdateLoop = startUpdateLoop;
 
-console.log('📱 app.js загружен (ИСПРАВЛЕННАЯ ВЕРСИЯ)');
+console.log('🧪 Тестовый режим ВКЛЮЧЕН для демонстрации графика');
+console.log('📊 Чтобы выключить, выполните: toggleTestMode()');
+console.log('📱 app.js загружен (ПОЛНАЯ ВЕРСИЯ)');
