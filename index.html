@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Futures Scalping Bot</title>
-    <!-- Загрузка библиотеки с обработчиками -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.0/lightweight-charts.standalone.js" 
+    <!-- ✅ ИСПРАВЛЕННАЯ ВЕРСИЯ 4.2.0 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.2.0/lightweight-charts.standalone.js" 
             onload="window._libraryLoaded = true; console.log('✅ Библиотека загружена'); if (window._pendingDraw) { window._pendingDraw(); window._pendingDraw = null; }"
             onerror="console.error('❌ Ошибка загрузки библиотеки!')">
     </script>
@@ -121,12 +121,10 @@
         if (typeof LightweightCharts !== 'undefined') {
             window._libraryLoaded = true;
             console.log('✅ Библиотека LightweightCharts доступна');
-            // Если есть отложенный вызов отрисовки
             if (window._pendingDraw && typeof window._pendingDraw === 'function') {
                 window._pendingDraw();
                 window._pendingDraw = null;
             }
-            // Если график ещё не нарисован
             if (document.getElementById('chart-container').innerHTML.includes('Загрузка')) {
                 setTimeout(() => {
                     if (typeof drawCandleChart === 'function') {
