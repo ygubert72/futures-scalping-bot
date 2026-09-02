@@ -1,5 +1,5 @@
 // ============================================================
-//  ГРАФИК (lightweight-charts) — БЕЗ АВТО-МАСШТАБИРОВАНИЯ
+//  ГРАФИК (lightweight-charts) — С ИСПРАВЛЕННЫМ ЗУМОМ
 // ============================================================
 
 let chartInstance = null;
@@ -97,7 +97,7 @@ function drawCandleChart() {
                     top: 0.10,
                     bottom: 0.10,
                 },
-                autoScale: false,  // <--- ОТКЛЮЧАЕМ АВТО-МАСШТАБИРОВАНИЕ
+                autoScale: false,
             },
             handleScroll: {
                 mouseWheel: true,
@@ -143,7 +143,7 @@ function drawCandleChart() {
         resizeObserver.observe(container);
         window._resizeObserver = resizeObserver;
         
-        console.log('✅ График создан (авто-масштабирование ОТКЛЮЧЕНО)');
+        console.log('✅ График создан');
     }
 
     // --- ОБНОВЛЕНИЕ ДАННЫХ ---
@@ -200,7 +200,7 @@ function centerChart() {
 }
 
 // ============================================================
-//  ВЕРТИКАЛЬНЫЙ ЗУМ (ПЛАВНЫЙ)
+//  ВЕРТИКАЛЬНЫЙ ЗУМ
 // ============================================================
 
 function zoomVertical(factor) {
@@ -226,6 +226,7 @@ function zoomVertical(factor) {
                 bottom: newBottom,
             },
         });
+        console.log(`📊 Зум: ${currentMargins.top.toFixed(3)} → ${newTop.toFixed(3)}`);
     } catch (e) {
         console.warn('Ошибка применения зума:', e);
     }
@@ -310,7 +311,7 @@ function updateTimeframe(interval) {
 }
 
 // ============================================================
-//  НАСТРОЙКА УПРАВЛЕНИЯ (С ПЛАВНЫМ ЗУМОМ)
+//  НАСТРОЙКА УПРАВЛЕНИЯ (БЕЗ СБРОСА НАКОПЛЕНИЯ)
 // ============================================================
 
 function setupChartControls() {
@@ -323,58 +324,37 @@ function setupChartControls() {
         });
     });
     
-    // Вертикальный зум
+    // Вертикальный зум (кнопки)
     document.getElementById('zoomInV')?.addEventListener('click', () => {
-        zoomVertical(0.7);
+        zoomVertical(0.6);
     });
     document.getElementById('zoomOutV')?.addEventListener('click', () => {
-        zoomVertical(1.3);
+        zoomVertical(1.5);
     });
     document.getElementById('zoomResetV')?.addEventListener('click', resetZoom);
     
-    // ПЛАВНЫЙ ЗУМ КОЛЕСИКОМ
+    // ===== ЗУМ КОЛЕСИКОМ (БЕЗ СБРОСА НАКОПЛЕНИЯ) =====
     const container = document.getElementById('chart-container');
     if (container) {
         let accumulatedDelta = 0;
-        let zoomTimeout = null;
-        const ZOOM_THRESHOLD = 0.3;
+        const ZOOM_THRESHOLD = 0.2;
         
-        container.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            
+        container.addEventListener('wheel', function(e) {
             if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                
                 accumulatedDelta += e.deltaY;
                 
-                clearTimeout(zoomTimeout);
-                
                 if (Math.abs(accumulatedDelta) >= ZOOM_THRESHOLD) {
-                    const factor = accumulatedDelta > 0 ? 1.05 : 0.95;
+                    const factor = accumulatedDelta > 0 ? 1.2 : 0.8;
                     zoomVertical(factor);
-                    accumulatedDelta = 0;
+                    // НЕ СБРАСЫВАЕМ accumulatedDelta!
+                    // Оставляем накопление, чтобы зум продолжал меняться
                 }
-                
-                zoomTimeout = setTimeout(() => {
-                    accumulatedDelta = 0;
-                }, 150);
-                
-                return;
             }
-            
-            clearTimeout(zoomTimeout);
-            zoomTimeout = setTimeout(() => {
-                const timeScale = chartInstance?.timeScale();
-                if (timeScale) {
-                    const range = timeScale.getVisibleRange();
-                    if (range) {
-                        const width = range.to - range.from;
-                        if (width < 5) {
-                            setTimeout(centerChart, 50);
-                        }
-                    }
-                }
-            }, 50);
-            
         }, { passive: false });
+        
+        console.log('✅ Обработчик колесика добавлен (без сброса накопления)');
     }
     
     // Добавляем кнопку центрирования
@@ -389,7 +369,7 @@ function setupChartControls() {
         controls.appendChild(centerBtn);
     }
     
-    console.log('✅ Управление графиком настроено (ПЛАВНЫЙ зум, авто-масштабирование ОТКЛЮЧЕНО)');
+    console.log('✅ Управление графиком настроено (БЕЗ сброса зума)');
 }
 
 // ============================================================
@@ -407,4 +387,4 @@ window.resetZoom = resetZoom;
 window.getLibrary = getLibrary;
 window.isLibraryLoaded = isLibraryLoaded;
 
-console.log('📊 chart-loader.js загружен (БЕЗ авто-масштабирования)');
+console.log('📊 chart-loader.js загружен (БЕЗ сброса зума)');
