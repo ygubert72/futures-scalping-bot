@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.scheduler.trading_scheduler import TradingScheduler
 
-# Создание таблиц в базе данных
+# Создание таблиц
 Base.metadata.create_all(bind=engine)
 
 # Настройка логирования
@@ -19,67 +19,58 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Глобальный планировщик
 scheduler = TradingScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Управление жизненным циклом приложения"""
-    # Запуск приложения
-    logger.info("🚀 Запуск Futures Scalping Bot API")
-    logger.info(f"📊 Настройки: {settings.model_dump()}")
+    logger.info("🚀 Запуск Futures Scalping Bot API v0.3.0")
+    logger.info(f"📊 Настройки: риск={settings.RISK_PER_TRADE*100}%, макс.позиция={settings.MAX_POSITION_SIZE}")
     
-    # Запускаем планировщик в фоновом режиме
     asyncio.create_task(scheduler.start())
-    logger.info("⏰ Торговый планировщик запущен в фоновом режиме")
+    logger.info("⏰ Торговый планировщик запущен")
     
-    yield  # Здесь приложение работает
+    yield
     
-    # Остановка приложения
     logger.info("🛑 Остановка Futures Scalping Bot API")
     await scheduler.stop()
     logger.info("⏰ Торговый планировщик остановлен")
 
-# Создаём приложение FastAPI
 app = FastAPI(
     title="Futures Scalping Bot API",
-    description="API для автоматической торговли фьючерсами RTS и Si на Московской бирже",
-    version="0.2.0",
+    description="Профессиональный скальпинг фьючерсов RTS и Si",
+    version="0.3.0",
     lifespan=lifespan
 )
 
-# Настройка CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене заменить на конкретные домены
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Подключаем роуты
 app.include_router(router, prefix="/api")
 
 @app.get("/")
 async def root():
-    """Корневой эндпоинт"""
     return {
-        "message": "Futures Scalping Bot API",
+        "message": "Futures Scalping Bot API v0.3.0",
         "status": "running",
-        "version": "0.2.0",
-        "docs": "/docs",
-        "health": "/health"
+        "risk_per_trade": f"{settings.RISK_PER_TRADE * 100}%",
+        "max_position": settings.MAX_POSITION_SIZE,
+        "docs": "/docs"
     }
 
 @app.get("/health")
 async def health_check():
-    """Проверка здоровья сервиса"""
     from app.utils.market_hours import MarketHours
     return {
         "status": "healthy",
         "timestamp": __import__('datetime').datetime.now().isoformat(),
         "market_open": MarketHours.is_market_open(),
-        "strategies_active": len(scheduler.active_strategies) if scheduler else 0
+        "strategies_active": len(scheduler.active_strategies)
     }
 
 if __name__ == "__main__":
@@ -88,5 +79,5 @@ if __name__ == "__main__":
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True  # Только для разработки
+        reload=True
     )
