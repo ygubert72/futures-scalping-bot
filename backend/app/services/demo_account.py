@@ -10,7 +10,7 @@ from app.models.account import Account, Position
 logger = logging.getLogger(__name__)
 
 class DemoAccount:
-    """Демо-счёт с эмуляцией торговли"""
+    """Демо-счёт с улучшенным управлением рисками"""
     
     def __init__(self):
         self.balance = settings.DEMO_BALANCE
@@ -23,6 +23,14 @@ class DemoAccount:
         self.daily_loss = 0.0
         self.trades_today = 0
         self.last_reset_date = datetime.now().date()
+        self.max_position_size = 5  # Максимум 5 контрактов
+        self.risk_per_trade = 0.01   # 1% риска на сделку
+        
+        # Стоимость 1 пункта для каждого инструмента
+        self.point_cost = {
+            "RTS": 1000,  # 1 пункт RTS = 1000 ₽
+            "Si": 10      # 1 пункт Si = 10 ₽
+        }
         
     def reset_daily_limit(self):
         """Сброс дневного лимита при новом дне"""
@@ -49,24 +57,50 @@ class DemoAccount:
             return False
             
         return True
-        
-    async def execute_order(self, instrument: str, side: str, price: float, quantity: int = 1) -> Optional[Dict]:
+    
+    def calculate_position_size(self, instrument: str, stop_loss_points: float) -> int:
         """
-        Исполнение заявки на демо-счёте
+        Расчет размера позиции на основе риска 1% от баланса
         
         Args:
             instrument: RTS или Si
-            side: buy или sell
-            price: цена
-            quantity: количество контрактов
+            stop_loss_points: Стоп-лосс в пунктах
             
         Returns:
-            Dict с информацией о сделке
+            int: Количество контрактов
+        """
+        # Риск на сделку (1% от баланса)
+        risk_amount = self.balance * self.risk_per_trade
+        
+        # Стоимость 1 пункта
+        point_cost = self.point_cost.get(instrument, 10)
+        
+        # Риск на 1 контракт
+        risk_per_contract = stop_loss_points * point_cost
+        
+        # Расчет количества контрактов
+        size = risk_amount / risk_per_contract
+        
+        # Округляем вниз и ограничиваем
+        size = max(1, int(size))  # Минимум 1 контракт
+        size = min(size, self.max_position_size)  # Максимум 5 контрактов
+        
+        # Дополнительная проверка для RTS (слишком дорогой)
+        if instrument == "RTS" and size > 1:
+            logger.warning(f"RTS: размер позиции {size} контрактов слишком большой, устанавливаем 1")
+            size = 1
+            
+        logger.info(f"Размер позиции для {instrument}: {size} контрактов (риск: {risk_amount:.2f} ₽)")
+        return size
+        
+    async def execute_order(self, instrument: str, side: str, price: float, quantity: int = 1) -> Optional[Dict]:
+        """
+        Исполнение заявки на демо-счёте с управлением рисками
         """
         if not self.can_trade():
             return None
             
-        # Проверка средств
+        # Расчет комиссии
         order_value = price * quantity
         commission = order_value * self.commission
         
@@ -77,10 +111,8 @@ class DemoAccount:
                 logger.warning(f"Недостаточно средств: требуется {required}, доступно {self.balance}")
                 return None
                 
-            # Списание средств
             self.balance -= required
             
-            # Открытие позиции
             position = Position(
                 instrument=instrument,
                 side="long",
@@ -91,40 +123,36 @@ class DemoAccount:
                 is_open=True
             )
             self.positions[instrument] = position
+            logger.info(f"ОТКРЫТА ПОЗИЦИЯ: {instrument} LONG {quantity} контрактов по {price}")
             
         elif side == "sell":
-            # Проверка наличия позиции
             if instrument not in self.positions or not self.positions[instrument].is_open:
                 logger.warning(f"Нет открытой позиции для {instrument}")
                 return None
                 
             position = self.positions[instrument]
             
-            # Расчёт P&L
             if position.side == "long":
                 profit = (price - position.entry_price) * quantity - commission
-            else:  # short
+            else:
                 profit = (position.entry_price - price) * quantity - commission
                 
-            # Обновление баланса
             self.balance += price * quantity + profit
             
-            # Закрытие позиции
             position.is_open = False
             position.profit = profit
             position.current_price = price
             
-            # Обновление статистики
             self.daily_loss += abs(profit) if profit < 0 else 0
             self.trades_today += 1
             
-            # Создание записи о сделке
             trade = {
                 "id": len(self.trades) + 1,
                 "instrument": instrument,
                 "side": side,
                 "price": price,
                 "quantity": quantity,
+                "entry_price": position.entry_price,
                 "timestamp": datetime.now().isoformat(),
                 "status": "filled",
                 "profit": profit,
@@ -134,30 +162,13 @@ class DemoAccount:
             }
             self.trades.append(trade)
             
-            logger.info(f"Сделка исполнена: {instrument} {side} {price} | P&L: {profit:.2f} ₽")
+            logger.info(f"ЗАКРЫТА ПОЗИЦИЯ: {instrument} P&L: {profit:.2f} ₽")
             return trade
             
         return None
         
-    async def close_position(self, instrument: str) -> Optional[Dict]:
-        """
-        Закрытие позиции по текущей цене
-        """
-        if instrument not in self.positions:
-            return None
-            
-        position = self.positions[instrument]
-        if not position.is_open:
-            return None
-            
-        current_price = position.current_price
-        side = "sell" if position.side == "long" else "buy"
-        
-        return await self.execute_order(instrument, side, current_price, position.quantity)
-        
     def get_balance(self) -> Dict:
         """Получение баланса"""
-        # Расчёт текущей стоимости открытых позиций
         total_positions_value = 0
         for pos in self.positions.values():
             if pos.is_open:
