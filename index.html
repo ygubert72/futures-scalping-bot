@@ -68,6 +68,7 @@
                         <div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
                             <button id="rtsBtn" class="strategy-btn inactive" onclick="toggleStrategy('RTS')">▶ RTS</button>
                             <button id="siBtn" class="strategy-btn inactive" onclick="toggleStrategy('Si')">▶ Si</button>
+                            <button onclick="resetAllStats()" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;">🔄 Сброс</button>
                         </div>
                         <div id="strategyStatus" style="font-size:11px;color:#94a3b8;">⏸ Остановлены</div>
                     </div>
@@ -90,23 +91,24 @@
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">📊 СТАТИСТИКА</div>
                         <div class="stats-grid">
-                            <div class="stat-item"><div class="value" id="totalTrades">0</div><div class="label">Сделок</div></div>
+                            <div class="stat-item"><div class="value" id="totalTrades">0</div><div class="label">Сделок (всего)</div></div>
                             <div class="stat-item"><div class="value green" id="winRate">0%</div><div class="label">Win Rate</div></div>
-                            <div class="stat-item"><div class="value green" id="totalProfit">0 ₽</div><div class="label">Профит</div></div>
+                            <div class="stat-item"><div class="value green" id="totalProfit">0 ₽</div><div class="label">Общий P&L</div></div>
                             <div class="stat-item"><div class="value yellow" id="drawdown">0%</div><div class="label">Просадка</div></div>
                         </div>
-                        <button id="exportBtn" class="export-btn">📥 Экспорт отчёта (Excel)</button>
+                        <div id="dailyStats" style="margin-top:4px;"></div>
+                        <button id="exportBtn" class="export-btn" style="margin-top:4px;">📥 Экспорт отчёта (Excel)</button>
                     </div>
                     
-                    <!-- ЗАКРЫТЫЕ СДЕЛКИ -->
+                    <!-- ЗАКРЫТЫЕ СДЕЛКИ (ЗА СЕГОДНЯ) -->
                     <div class="card" style="flex:1;min-height:0;">
-                        <div class="card-title">📋 ЗАКРЫТЫЕ СДЕЛКИ</div>
+                        <div class="card-title">📋 СДЕЛКИ ЗА СЕГОДНЯ</div>
                         <div class="trades-table">
                             <div class="scroll">
                                 <table>
                                     <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Цена</th><th style="text-align:right;">P&L</th></tr></thead>
                                     <tbody id="tradesBody">
-                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет закрытых сделок</td></tr>
+                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок за сегодня</td></tr>
                                     </tbody>
                                 </table>
                             </div>
