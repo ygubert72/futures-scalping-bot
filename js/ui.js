@@ -1,22 +1,51 @@
 // ============================================================
-//  ОТРИСОВКА ИНТЕРФЕЙСА (С РАЗДЕЛЬНЫМИ ПОЛЯМИ)
+//  ОТРИСОВКА ИНТЕРФЕЙСА (С ДНЕВНОЙ СТАТИСТИКОЙ)
 // ============================================================
 
 function render() {
+    // Проверяем смену дня
+    if (typeof resetDailyStats === 'function') {
+        resetDailyStats();
+    }
+    
     const s = STATE.stats;
+    const daily = STATE.dailyStats;
     const winRate = s.total ? Math.round((s.wins / s.total) * 100) : 0;
+    const dailyWinRate = daily.total ? Math.round((daily.wins / daily.total) * 100) : 0;
     const profit = Math.round(s.profit * 100) / 100;
+    const dailyProfit = Math.round(daily.profit * 100) / 100;
 
     // Баланс и котировки
     document.getElementById('balanceDisplay').textContent = Math.round(STATE.balance) + ' ₽';
     document.getElementById('rtsQuote').textContent = `RTS: ${STATE.quotes.RTS.price ? STATE.quotes.RTS.price.toFixed(2) : '--'}`;
     document.getElementById('siQuote').textContent = `Si: ${STATE.quotes.Si.price ? STATE.quotes.Si.price.toFixed(2) : '--'}`;
 
-    // Статистика
+    // ОБЩАЯ СТАТИСТИКА
     document.getElementById('totalTrades').textContent = s.total;
     document.getElementById('winRate').textContent = winRate + '%';
     document.getElementById('totalProfit').textContent = (profit > 0 ? '+' : '') + profit + ' ₽';
     document.getElementById('totalProfit').className = 'value ' + (profit >= 0 ? 'green' : 'red');
+
+    // ДНЕВНАЯ СТАТИСТИКА
+    const dailyEl = document.getElementById('dailyStats');
+    if (dailyEl) {
+        dailyEl.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:4px;">
+                <div class="stat-item" style="background:#0f172a;padding:4px 8px;border-radius:4px;text-align:center;">
+                    <div style="font-size:14px;font-weight:bold;color:#e2e8f0;">${daily.total}</div>
+                    <div style="font-size:9px;color:#94a3b8;">Сделок (сегодня)</div>
+                </div>
+                <div class="stat-item" style="background:#0f172a;padding:4px 8px;border-radius:4px;text-align:center;">
+                    <div style="font-size:14px;font-weight:bold;color:${dailyWinRate >= 50 ? '#22c55e' : '#ef4444'};">${dailyWinRate}%</div>
+                    <div style="font-size:9px;color:#94a3b8;">Win Rate (сегодня)</div>
+                </div>
+                <div class="stat-item" style="background:#0f172a;padding:4px 8px;border-radius:4px;text-align:center;">
+                    <div style="font-size:14px;font-weight:bold;color:${dailyProfit >= 0 ? '#22c55e' : '#ef4444'};">${(dailyProfit > 0 ? '+' : '') + dailyProfit} ₽</div>
+                    <div style="font-size:9px;color:#94a3b8;">P&L (сегодня)</div>
+                </div>
+            </div>
+        `;
+    }
 
     // Кнопки стратегий
     const rtsBtn = document.getElementById('rtsBtn');
@@ -28,10 +57,10 @@ function render() {
     document.getElementById('strategyStatus').textContent = 
         (STATE.strategies.RTS || STATE.strategies.Si) ? '🟢 Активны' : '⏸ Остановлены';
 
-    // --- ОТКРЫТЫЕ ПОЗИЦИИ ---
+    // Открытые позиции
     renderOpenPositions();
 
-    // --- ЗАКРЫТЫЕ СДЕЛКИ ---
+    // Закрытые сделки (только за сегодня)
     renderClosedTrades();
 
     // Текущая цена
@@ -69,7 +98,7 @@ function renderOpenPositions() {
     const hasPositions = Object.values(positions).some(p => p !== null);
 
     if (!hasPositions) {
-        container.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет открытых позиций</td></tr>';
+        container.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#475569;padding:10px 0;">Нет открытых позиций</td></tr>';
         return;
     }
 
@@ -86,7 +115,6 @@ function renderOpenPositions() {
         const sideLabel = pos.side === 'buy' ? 'LONG' : 'SHORT';
         const sideClass = pos.side === 'buy' ? 'buy' : 'sell';
 
-        // Время открытия
         const openTime = pos.openTime ? new Date(pos.openTime).toLocaleTimeString() : '--:--:--';
 
         html += `
@@ -105,28 +133,29 @@ function renderOpenPositions() {
 }
 
 // ============================================================
-//  ОТРИСОВКА ЗАКРЫТЫХ СДЕЛОК
+//  ОТРИСОВКА ЗАКРЫТЫХ СДЕЛОК (ТОЛЬКО ЗА СЕГОДНЯ)
 // ============================================================
 
 function renderClosedTrades() {
     const tbody = document.getElementById('tradesBody');
     if (!tbody) return;
 
-    // Берем только закрытые сделки (где есть profit и это число)
+    // Берем только закрытые сделки за сегодня
+    const today = new Date().toDateString();
     const closedTrades = STATE.trades.filter(t => 
         t.profit !== undefined && 
         t.profit !== null && 
         typeof t.profit === 'number' &&
         t.side !== 'ВХОД LONG' && 
-        t.side !== 'ВХОД SHORT'
+        t.side !== 'ВХОД SHORT' &&
+        new Date(t.timestamp).toDateString() === today
     );
 
     if (closedTrades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет закрытых сделок</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет закрытых сделок за сегодня</td></tr>';
         return;
     }
 
-    // Показываем последние 15 сделок (сначала новые)
     const trades = closedTrades.slice(-15).reverse();
     
     tbody.innerHTML = trades.map(t => `
@@ -150,7 +179,7 @@ function toggleStrategy(instrument) {
 }
 
 // ============================================================
-//  ЭКСПОРТ В EXCEL (ТОЛЬКО ЗАКРЫТЫЕ СДЕЛКИ)
+//  ЭКСПОРТ В EXCEL (ТОЛЬКО ЗА СЕГОДНЯ)
 // ============================================================
 
 async function exportToExcel() {
@@ -159,27 +188,32 @@ async function exportToExcel() {
             await loadScript('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
         }
 
-        // Берем только закрытые сделки
+        const today = new Date().toDateString();
         const closedTrades = STATE.trades.filter(t => 
             t.profit !== undefined && 
             t.profit !== null && 
             typeof t.profit === 'number' &&
             t.side !== 'ВХОД LONG' && 
-            t.side !== 'ВХОД SHORT'
+            t.side !== 'ВХОД SHORT' &&
+            new Date(t.timestamp).toDateString() === today
         );
 
         const s = STATE.stats;
+        const daily = STATE.dailyStats;
         const winRate = s.total ? Math.round((s.wins / s.total) * 100) : 0;
+        const dailyWinRate = daily.total ? Math.round((daily.wins / daily.total) * 100) : 0;
         const profit = Math.round(s.profit * 100) / 100;
+        const dailyProfit = Math.round(daily.profit * 100) / 100;
         const total = s.total || 0;
 
-        // Статистика по закрытым сделкам
         const statsData = [
             ['ПОКАЗАТЕЛЬ', 'ЗНАЧЕНИЕ'],
             ['Дата отчёта', new Date().toLocaleString()],
             ['Инструмент', STATE.currentInstrument || 'RTS/Si'],
             ['Начальный баланс', 100000],
             ['Текущий баланс', Math.round(STATE.balance)],
+            ['', ''],
+            ['=== ОБЩАЯ СТАТИСТИКА ===', ''],
             ['Общий профит', profit],
             ['Всего сделок (закрытых)', total],
             ['Прибыльных сделок', s.wins],
@@ -188,11 +222,16 @@ async function exportToExcel() {
             ['Средний профит', total > 0 ? (s.wins > 0 ? (s.profit / s.wins).toFixed(2) : 0) : 0],
             ['Средний убыток', total > 0 ? (s.losses > 0 ? (Math.abs(s.profit) / s.losses).toFixed(2) : 0) : 0],
             ['Профит-фактор', total > 0 ? (s.wins / (s.losses || 1)).toFixed(2) : 0],
+            ['', ''],
+            ['=== ДНЕВНАЯ СТАТИСТИКА ===', ''],
+            ['Дата', today],
+            ['P&L за сегодня', dailyProfit],
+            ['Сделок за сегодня', daily.total],
+            ['Win Rate за сегодня', dailyWinRate + '%'],
         ];
 
-        // Таблица закрытых сделок
         const tradesData = [
-            ['№', 'Время', 'Инструмент', 'Направление', 'Цена входа', 'Цена выхода', 'P&L (₽)']
+            ['№', 'Время', 'Инструмент', 'Направление', 'Цена', 'P&L (₽)']
         ];
         closedTrades.forEach((t, i) => {
             tradesData.push([
@@ -200,13 +239,11 @@ async function exportToExcel() {
                 t.timeStr || new Date(t.timestamp).toLocaleTimeString(),
                 t.instrument || 'RTS',
                 t.side === 'buy' ? 'Покупка' : 'Продажа',
-                t.entryPrice || t.price || '--',
                 t.price || '--',
                 t.profit || 0
             ]);
         });
 
-        // Стратегии
         const strategyData = [
             ['ПАРАМЕТР', 'RTS', 'Si'],
             ['Тип стратегии', 'Импульсный пробой', 'Отскок от уровней'],
@@ -220,8 +257,8 @@ async function exportToExcel() {
         const ws2 = XLSX.utils.aoa_to_sheet(tradesData);
         const ws3 = XLSX.utils.aoa_to_sheet(strategyData);
 
-        ws1['!cols'] = [{ wch: 25 }, { wch: 20 }];
-        ws2['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+        ws1['!cols'] = [{ wch: 30 }, { wch: 20 }];
+        ws2['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
         ws3['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 20 }];
 
         XLSX.utils.book_append_sheet(wb, ws1, 'Статистика');
@@ -231,17 +268,13 @@ async function exportToExcel() {
         const filename = `trading_report_${new Date().toISOString().slice(0,10)}.xlsx`;
         XLSX.writeFile(wb, filename);
         
-        console.log(`✅ Отчёт сохранён: ${filename} (${closedTrades.length} закрытых сделок)`);
+        console.log(`✅ Отчёт сохранён: ${filename} (${closedTrades.length} сделок за сегодня)`);
         
     } catch (e) {
         console.error('❌ Ошибка экспорта:', e);
         alert('Ошибка экспорта. Проверьте интернет и попробуйте снова.');
     }
 }
-
-// ============================================================
-//  ЗАГРУЗКА СКРИПТОВ
-// ============================================================
 
 function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -263,4 +296,4 @@ window.renderClosedTrades = renderClosedTrades;
 window.toggleStrategy = toggleStrategy;
 window.exportToExcel = exportToExcel;
 
-console.log('📋 ui.js загружен (РАЗДЕЛЬНЫЕ ПОЛЯ)');
+console.log('📋 ui.js загружен (с дневной статистикой)');
