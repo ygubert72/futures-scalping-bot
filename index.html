@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Futures Scalping Bot</title>
+    <title>Scalping Bot Pro</title>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
         <div class="container">
             <div class="header">
                 <div>
-                    <h1>📊 Scalping Bot</h1>
+                    <h1>⚡ Scalping Bot Pro</h1>
                     <div style="display:flex;gap:14px;font-size:11px;color:#94a3b8;margin-top:1px;">
                         <span id="rtsQuote">RTS: --</span>
                         <span id="siQuote">Si: --</span>
@@ -34,8 +34,6 @@
                             <button data-interval="1" class="active">1м</button>
                             <button data-interval="5">5м</button>
                             <button data-interval="15">15м</button>
-                            <button data-interval="60">1ч</button>
-                            <button data-interval="240">4ч</button>
                             <span class="sep">|</span>
                             <button id="zoomInV" title="Вертикальный зум +">🔍+</button>
                             <button id="zoomOutV" title="Вертикальный зум -">🔍−</button>
@@ -56,9 +54,7 @@
                             <span id="candleCount">0</span> свечей · 
                             <span id="timeframeLabel">1м</span>
                         </div>
-                        <div class="zoom-info">
-                            Колёсико: гор.масштаб | Ctrl+колёсико: верт.масштаб
-                        </div>
+                        <div class="zoom-info">Колёсико: масштаб | Ctrl+колёсико: верт.масштаб</div>
                     </div>
                 </div>
                 
@@ -73,15 +69,14 @@
                         <div id="strategyStatus" style="font-size:11px;color:#94a3b8;">⏸ Остановлены</div>
                     </div>
 
-                    <!-- ОТКРЫТЫЕ ПОЗИЦИИ -->
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">📌 ОТКРЫТЫЕ ПОЗИЦИИ</div>
                         <div class="trades-table" style="max-height:120px;">
                             <div class="scroll">
                                 <table>
-                                    <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Вход</th><th>Текущая</th><th style="text-align:right;">P&L</th></tr></thead>
+                                    <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Кол-во</th><th>Вход</th><th>Текущая</th><th style="text-align:right;">P&L</th></tr></thead>
                                     <tbody id="openPositionsBody">
-                                        <tr><td colspan="6" style="text-align:center;color:#475569;padding:10px 0;">Нет открытых позиций</td></tr>
+                                        <tr><td colspan="7" style="text-align:center;color:#475569;padding:10px 0;">Нет открытых позиций</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -91,7 +86,7 @@
                     <div class="card" style="flex-shrink:0;">
                         <div class="card-title">📊 СТАТИСТИКА</div>
                         <div class="stats-grid">
-                            <div class="stat-item"><div class="value" id="totalTrades">0</div><div class="label">Сделок (всего)</div></div>
+                            <div class="stat-item"><div class="value" id="totalTrades">0</div><div class="label">Сделок</div></div>
                             <div class="stat-item"><div class="value green" id="winRate">0%</div><div class="label">Win Rate</div></div>
                             <div class="stat-item"><div class="value green" id="totalProfit">0 ₽</div><div class="label">Общий P&L</div></div>
                             <div class="stat-item"><div class="value yellow" id="drawdown">0%</div><div class="label">Просадка</div></div>
@@ -100,15 +95,14 @@
                         <button id="exportBtn" class="export-btn" style="margin-top:4px;">📥 Экспорт отчёта (Excel)</button>
                     </div>
                     
-                    <!-- ЗАКРЫТЫЕ СДЕЛКИ (ЗА СЕГОДНЯ) -->
                     <div class="card" style="flex:1;min-height:0;">
                         <div class="card-title">📋 СДЕЛКИ ЗА СЕГОДНЯ</div>
                         <div class="trades-table">
                             <div class="scroll">
                                 <table>
-                                    <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Цена</th><th style="text-align:right;">P&L</th></tr></thead>
+                                    <thead><tr><th>Время</th><th>Инстр</th><th>Напр</th><th>Кол-во</th><th>Цена</th><th style="text-align:right;">P&L</th></tr></thead>
                                     <tbody id="tradesBody">
-                                        <tr><td colspan="5" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок за сегодня</td></tr>
+                                        <tr><td colspan="6" style="text-align:center;color:#475569;padding:10px 0;">Нет сделок за сегодня</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -119,11 +113,7 @@
         </div>
     </div>
 
-    <!-- ===== ЗАГРУЗКА БИБЛИОТЕКИ ===== -->
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js">
-    </script>
-
-    <!-- ===== ПОДКЛЮЧАЕМ СКРИПТЫ ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
     <script src="js/trading.js"></script>
@@ -132,25 +122,16 @@
     <script src="js/app.js"></script>
     <script src="js/firebase.js" type="module"></script>
     
-    <!-- ===== ПРОВЕРКА ЗАГРУЗКИ ===== -->
     <script>
     (function ensureLibrary() {
         var lib = window.LightweightCharts || window.lightweightCharts || window.LW;
         if (lib) {
             window._libraryLoaded = true;
-            console.log('✅ Библиотека LightweightCharts загружена!');
-            if (window._pendingDraw) {
-                window._pendingDraw();
-                window._pendingDraw = null;
-            }
-            if (typeof safeDrawCandleChart === 'function') {
-                setTimeout(safeDrawCandleChart, 100);
-            }
-            if (typeof render === 'function') {
-                setTimeout(render, 200);
-            }
+            console.log('✅ Библиотека загружена!');
+            if (window._pendingDraw) { window._pendingDraw(); window._pendingDraw = null; }
+            if (typeof safeDrawCandleChart === 'function') setTimeout(safeDrawCandleChart, 100);
+            if (typeof render === 'function') setTimeout(render, 200);
         } else {
-            console.log('⏳ Ожидание загрузки библиотеки...');
             setTimeout(ensureLibrary, 300);
         }
     })();
