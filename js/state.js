@@ -1,118 +1,95 @@
 // ============================================================
-//  ГЛОБАЛЬНОЕ СОСТОЯНИЕ (С ДНЕВНОЙ СТАТИСТИКОЙ)
+//  ГЛОБАЛЬНОЕ СОСТОЯНИЕ (С РАСШИРЕННЫМИ ДАННЫМИ)
 // ============================================================
 
-// Основное состояние
 const STATE = {
+    // Баланс и сделки
     balance: 100000,
     trades: [],
-    strategies: { RTS: false, Si: false },
-    quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
     positions: { RTS: null, Si: null },
-    stats: { total: 0, wins: 0, losses: 0, profit: 0 },
+    
+    // Стратегии
+    strategies: { RTS: false, Si: false },
+    
+    // Котировки
+    quotes: { RTS: { price: 0, change: 0 }, Si: { price: 0, change: 0 } },
+    
+    // Свечи
     minuteCandles: { RTS: [], Si: [] },
     candles: { RTS: [], Si: [] },
-    visibleCandles: [],
-    interval: 1,
-    maxCandles: 300,
-    zoomLevel: 1,
-    offset: 0,
-    verticalZoom: 1,
+    maxCandles: 500,
+    
+    // === ПРОФЕССИОНАЛЬНЫЕ ДАННЫЕ ===
+    // Объемный профиль
+    volumeProfile: { RTS: null, Si: null },
+    // Кумулятивная дельта
+    cvd: { RTS: [], Si: [] },
+    // Order Blocks (зоны крупных заявок)
+    orderBlocks: { RTS: [], Si: [] },
+    // Fair Value Gaps
+    fvg: { RTS: [], Si: [] },
+    
+    // Текущий инструмент и настройки графика
     currentInstrument: 'RTS',
+    interval: 1,
+    zoomLevel: 1,
+    verticalZoom: 1,
+    visibleCandles: [],
     
     // === ДНЕВНАЯ СТАТИСТИКА ===
     dailyStats: {
-        date: null,        // Текущая дата
+        date: null,
         total: 0,
         wins: 0,
         losses: 0,
         profit: 0,
-        trades: []          // Сделки за сегодня
-    }
+        trades: [],
+        maxDrawdown: 0,
+        peakBalance: 100000
+    },
+    
+    // Общая статистика
+    stats: { total: 0, wins: 0, losses: 0, profit: 0, maxDrawdown: 0 }
 };
 
 const INSTRUMENT_CODES = { RTS: null, Si: null };
 
 // ============================================================
-//  ФУНКЦИЯ СБРОСА ДНЕВНОЙ СТАТИСТИКИ
+//  СБРОС СТАТИСТИКИ
 // ============================================================
 
 function resetDailyStats() {
     const today = new Date().toDateString();
-    
-    // Если дата изменилась — сбрасываем
     if (STATE.dailyStats.date !== today) {
         console.log(`📊 Сброс дневной статистики (${today})`);
-        console.log(`   Вчерашний P&L: ${STATE.dailyStats.profit.toFixed(2)} ₽`);
-        console.log(`   Вчерашних сделок: ${STATE.dailyStats.total}`);
-        
         STATE.dailyStats = {
             date: today,
             total: 0,
             wins: 0,
             losses: 0,
             profit: 0,
-            trades: []
+            trades: [],
+            maxDrawdown: 0,
+            peakBalance: STATE.balance || 100000
         };
-        
-        // Обновляем интерфейс
-        if (typeof render === 'function') {
-            render();
-        }
-        
+        if (typeof render === 'function') render();
         return true;
     }
     return false;
 }
 
-// ============================================================
-//  ФУНКЦИЯ ПОЛНОГО СБРОСА СТАТИСТИКИ (ВРУЧНУЮ)
-// ============================================================
-
 function resetAllStats() {
-    console.log('🔄 ПОДТВЕРЖДЕНИЕ: полный сброс статистики');
-    console.log(`   Текущий P&L: ${STATE.stats.profit.toFixed(2)} ₽`);
-    console.log(`   Текущих сделок: ${STATE.stats.total}`);
-    
-    // Сброс основной статистики
-    STATE.stats = { total: 0, wins: 0, losses: 0, profit: 0 };
+    console.log('🔄 Полный сброс статистики');
+    STATE.stats = { total: 0, wins: 0, losses: 0, profit: 0, maxDrawdown: 0 };
     STATE.trades = [];
     STATE.positions = { RTS: null, Si: null };
     STATE.balance = 100000;
-    
-    // Сброс дневной статистики
-    const today = new Date().toDateString();
-    STATE.dailyStats = {
-        date: today,
-        total: 0,
-        wins: 0,
-        losses: 0,
-        profit: 0,
-        trades: []
-    };
-    
-    console.log('✅ Статистика сброшена!');
-    
-    // Обновляем интерфейс
-    if (typeof render === 'function') {
-        render();
-    }
-    
+    resetDailyStats();
+    if (typeof render === 'function') render();
     return true;
 }
-
-// ============================================================
-//  АВТОМАТИЧЕСКИЙ СБРОС ПРИ ЗАГРУЗКЕ
-// ============================================================
-
-// Проверяем смену дня при загрузке
-resetDailyStats();
-
-// ============================================================
-//  ЭКСПОРТ
-// ============================================================
 
 window.resetDailyStats = resetDailyStats;
 window.resetAllStats = resetAllStats;
 
-console.log('📦 state.js загружен (с дневной статистикой)');
+console.log('📦 state.js загружен (профессиональная версия)');
