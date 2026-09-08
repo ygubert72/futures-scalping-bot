@@ -1,74 +1,101 @@
-from datetime import datetime, time
-from app.core.config import settings
+import asyncio
 import logging
+from datetime import datetime
+from typing import Dict
+
+from app.utils.market_hours import MarketHours
+from app.services.market_data import market_data
+from app.strategies.pro_scalping import ProScalpingStrategy
+from app.strategies.smart_money import SmartMoneyStrategy
+from app.services.demo_account import demo_account
+from app.services.order_flow import OrderFlowAnalyzer
+from app.strategies.base_strategy import BaseStrategy
 
 logger = logging.getLogger(__name__)
 
-class MarketHours:
-    """Класс для работы с торговыми часами"""
+class TradingScheduler:
+    """Профессиональный торговый планировщик"""
     
-    @staticmethod
-    def is_market_open() -> bool:
-        """Проверяет, открыта ли биржа сейчас"""
-        now = datetime.now().time()
+    def __init__(self):
+        self.strategies: Dict[str, BaseStrategy] = {}
+        self.demo_account = demo_account
+        self.order_flow = OrderFlowAnalyzer()
+        self.is_running = False
+        self.last_reset = datetime.now().date()
         
-        # Основная сессия
-        if settings.MARKET_OPEN <= now <= settings.MARKET_CLOSE:
-            return True
+        # Активные стратегии
+        self.strategy_map = {
+            "RTS": ProScalpingStrategy,
+            "Si": SmartMoneyStrategy
+        }
+        
+    async def start(self):
+        """Запуск планировщика"""
+        self.is_running = True
+        logger.info("🚀 Профессиональный планировщик запущен")
+        
+        # Запускаем стратегии для всех инструментов
+        for instrument in ["RTS", "Si"]:
+            await self._start_strategy(instrument)
             
-        # Вечерняя сессия
-        if settings.EVENING_OPEN <= now <= settings.EVENING_CLOSE:
-            return True
+        # Основной цикл
+        while self.is_running:
+            try:
+                await self._tick()
+                await asyncio.sleep(1)  # Обновление каждую секунду
+            except Exception as e:
+                logger.error(f"Ошибка в планировщике: {e}")
+                await asyncio.sleep(5)
+                
+    async def _tick(self):
+        """Тик обновления"""
+        # Сброс дневных лимитов
+        today = datetime.now().date()
+        if today != self.last_reset:
+            self.last_reset = today
+            self.demo_account.reset_daily_limit()
+            logger.info("📊 Дневные лимиты сброшены")
             
-        return False
-    
-    @staticmethod
-    def get_next_session_start() -> datetime:
-        """Получает время начала следующей сессии"""
-        now = datetime.now()
+        # Проверка рынка
+        market_open = MarketHours.is_market_open()
         
-        # Если сейчас до 10:00 - сегодня в 10:00
-        if now.time() < settings.MARKET_OPEN:
-            return now.replace(hour=10, minute=0, second=0, microsecond=0)
-        
-        # Если сейчас между 18:45 и 19:00 - сегодня в 19:00
-        if settings.MARKET_CLOSE < now.time() < settings.EVENING_OPEN:
-            return now.replace(hour=19, minute=0, second=0, microsecond=0)
-        
-        # Если сейчас после 23:50 - завтра в 10:00
-        if now.time() > settings.EVENING_CLOSE:
-            tomorrow = now + timedelta(days=1)
-            return tomorrow.replace(hour=10, minute=0, second=0, microsecond=0)
-        
-        # Иначе - сейчас торги идут
-        return now
-    
-    @staticmethod
-    def get_session_remaining() -> str:
-        """Возвращает оставшееся время сессии в формате ЧЧ:ММ:СС"""
-        if not MarketHours.is_market_open():
-            return "Торги закрыты"
+        if not market_open:
+            # Если рынок закрыт, останавливаем стратегии
+            for key, strategy in list(self.strategies.items()):
+                if strategy.is_active:
+                    await strategy.stop()
+            return
             
-        now = datetime.now()
-        close_time = None
-        
-        # Определяем время закрытия текущей сессии
-        if now.time() <= settings.MARKET_CLOSE:
-            close_time = now.replace(
-                hour=settings.MARKET_CLOSE.hour,
-                minute=settings.MARKET_CLOSE.minute,
-                second=0
-            )
-        else:
-            close_time = now.replace(
-                hour=settings.EVENING_CLOSE.hour,
-                minute=settings.EVENING_CLOSE.minute,
-                second=0
-            )
-        
-        remaining = close_time - now
-        hours = remaining.seconds // 3600
-        minutes = (remaining.seconds % 3600) // 60
-        seconds = remaining.seconds % 60
-        
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        # Получаем данные для каждого инструмента
+        for instrument in ["RTS", "Si"]:
+            try:
+                quote = await market_data.get_quote(instrument)
+                if quote and quote.get("price"):
+                    # Обновляем стратегию
+                    strategy = self.strategies.get(instrument)
+                    if strategy and strategy.is_active:
+                        await strategy.on_quote(quote)
+            except Exception as e:
+                logger.error(f"Ошибка обработки {instrument}: {e}")
+                
+    async def _start_strategy(self, instrument: str):
+        """Запуск стратегии"""
+        try:
+            strategy_class = self.strategy_map.get(instrument)
+            if not strategy_class:
+                logger.warning(f"Нет стратегии для {instrument}")
+                return
+                
+            strategy = strategy_class(instrument, self.demo_account)
+            await strategy.start()
+            self.strategies[instrument] = strategy
+            logger.info(f"✅ Стратегия запущена для {instrument}")
+        except Exception as e:
+            logger.error(f"Ошибка запуска {instrument}: {e}")
+            
+    async def stop(self):
+        """Остановка планировщика"""
+        self.is_running = False
+        for strategy in self.strategies.values():
+            await strategy.stop()
+        logger.info("⏹ Планировщик остановлен")
