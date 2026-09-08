@@ -70,7 +70,7 @@ async def health_check():
         "status": "healthy",
         "timestamp": __import__('datetime').datetime.now().isoformat(),
         "market_open": MarketHours.is_market_open(),
-        "strategies_active": len(scheduler.active_strategies)
+        "strategies_active": len(scheduler.strategies)  # <-- ИСПРАВЛЕНО
     }
 
 if __name__ == "__main__":
