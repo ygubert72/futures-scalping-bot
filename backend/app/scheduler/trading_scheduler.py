@@ -1,95 +1,100 @@
 import asyncio
 import logging
 from datetime import datetime
+from typing import Dict, Optional
 
 from app.utils.market_hours import MarketHours
 from app.services.market_data import market_data
-from app.strategies.impulse_strategy import ImpulseStrategy
-from app.strategies.level_strategy import LevelStrategy
-from app.services.demo_account import demo_account
+from app.strategies.pro_scalping import ProScalpingStrategy
+from app.strategies.smart_money import SmartMoneyStrategy
+from app.services.demo_account import DemoAccount
+from app.services.order_flow import OrderFlowAnalyzer
 
 logger = logging.getLogger(__name__)
 
 class TradingScheduler:
-    """Планировщик для автоматической торговли с улучшенным управлением"""
+    """Профессиональный торговый планировщик"""
     
     def __init__(self):
-        self.active_strategies = {}
+        self.strategies: Dict[str, BaseStrategy] = {}
+        self.demo_account = DemoAccount()
+        self.order_flow = OrderFlowAnalyzer()
         self.is_running = False
-        self.daily_trades = 0
-        self.last_reset_date = datetime.now().date()
+        self.last_reset = datetime.now().date()
+        
+        # Активные стратегии
+        self.strategy_map = {
+            "RTS": ProScalpingStrategy,
+            "Si": SmartMoneyStrategy
+        }
         
     async def start(self):
         """Запуск планировщика"""
         self.is_running = True
-        logger.info("Торговый планировщик запущен (v0.3.0)")
+        logger.info("🚀 Профессиональный планировщик запущен")
         
+        # Запускаем стратегии для всех инструментов
+        for instrument in ["RTS", "Si"]:
+            await self._start_strategy(instrument)
+            
+        # Основной цикл
         while self.is_running:
             try:
-                # Сброс дневного счетчика
-                today = datetime.now().date()
-                if today != self.last_reset_date:
-                    self.daily_trades = 0
-                    self.last_reset_date = today
-                    logger.info("Дневной счетчик сделок сброшен")
-                
-                market_open = MarketHours.is_market_open()
-                
-                if market_open:
-                    # Проверка лимита сделок
-                    if self.daily_trades < 10:
-                        for instrument in ["RTS", "Si"]:
-                            key = f"{instrument}_auto"
-                            if key not in self.active_strategies:
-                                await self._start_strategy(instrument)
-                    else:
-                        logger.info(f"Достигнут лимит сделок ({self.daily_trades}/10)")
-                        # Останавливаем стратегии, если лимит достигнут
-                        for key in list(self.active_strategies.keys()):
-                            if key.endswith("_auto"):
-                                await self._stop_strategy(key)
-                else:
-                    # Рынок закрыт — останавливаем стратегии
-                    for key in list(self.active_strategies.keys()):
-                        if key.endswith("_auto"):
-                            await self._stop_strategy(key)
-                
-                await asyncio.sleep(60)
-                
+                await self._tick()
+                await asyncio.sleep(1)  # Обновление каждую секунду
             except Exception as e:
                 logger.error(f"Ошибка в планировщике: {e}")
-                await asyncio.sleep(60)
-    
-    async def _start_strategy(self, instrument: str):
-        """Запуск стратегии с расчетом размера позиции"""
-        strategy_type = "impulse" if instrument == "RTS" else "level"
-        
-        try:
-            if strategy_type == "impulse":
-                strategy = ImpulseStrategy(instrument, demo_account)
-            else:
-                strategy = LevelStrategy(instrument, demo_account)
+                await asyncio.sleep(5)
+                
+    async def _tick(self):
+        """Тик обновления"""
+        # Сброс дневных лимитов
+        today = datetime.now().date()
+        if today != self.last_reset:
+            self.last_reset = today
+            self.demo_account.reset_daily_limit()
+            logger.info("📊 Дневные лимиты сброшены")
             
-            await strategy.start()
-            key = f"{instrument}_auto"
-            self.active_strategies[key] = strategy
-            logger.info(f"Запущена стратегия для {instrument}")
-        except Exception as e:
-            logger.error(f"Ошибка запуска стратегии {instrument}: {e}")
-    
-    async def _stop_strategy(self, key: str):
-        """Остановка стратегии"""
+        # Проверка рынка
+        market_open = MarketHours.is_market_open()
+        
+        if not market_open:
+            # Если рынок закрыт, останавливаем стратегии
+            for key, strategy in list(self.strategies.items()):
+                if strategy.is_active:
+                    await strategy.stop()
+            return
+            
+        # Получаем данные для каждого инструмента
+        for instrument in ["RTS", "Si"]:
+            try:
+                quote = await market_data.get_quote(instrument)
+                if quote and quote.get("price"):
+                    # Обновляем стратегию
+                    strategy = self.strategies.get(instrument)
+                    if strategy and strategy.is_active:
+                        await strategy.on_quote(quote)
+            except Exception as e:
+                logger.error(f"Ошибка обработки {instrument}: {e}")
+                
+    async def _start_strategy(self, instrument: str):
+        """Запуск стратегии"""
         try:
-            if key in self.active_strategies:
-                await self.active_strategies[key].stop()
-                del self.active_strategies[key]
-                logger.info(f"Остановлена стратегия {key}")
+            strategy_class = self.strategy_map.get(instrument)
+            if not strategy_class:
+                logger.warning(f"Нет стратегии для {instrument}")
+                return
+                
+            strategy = strategy_class(instrument, self.demo_account)
+            await strategy.start()
+            self.strategies[instrument] = strategy
+            logger.info(f"✅ Стратегия запущена для {instrument}")
         except Exception as e:
-            logger.error(f"Ошибка остановки стратегии {key}: {e}")
-    
+            logger.error(f"Ошибка запуска {instrument}: {e}")
+            
     async def stop(self):
         """Остановка планировщика"""
         self.is_running = False
-        for key in list(self.active_strategies.keys()):
-            await self._stop_strategy(key)
-        logger.info("Торговый планировщик остановлен")
+        for strategy in self.strategies.values():
+            await strategy.stop()
+        logger.info("⏹ Планировщик остановлен")
