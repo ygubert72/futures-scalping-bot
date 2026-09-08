@@ -9,6 +9,7 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime  # <-- ДОБАВИТЬ ЭТОТ ИМПОРТ
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class OrderFlowAnalyzer:
             vwap = mid
             
         data = OrderFlowData(
-            timestamp=datetime.now().timestamp(),
+            timestamp=datetime.now().timestamp(),  # <-- ТЕПЕРЬ РАБОТАЕТ
             price=mid,
             bid_volume=bid_vol,
             ask_volume=ask_vol,
