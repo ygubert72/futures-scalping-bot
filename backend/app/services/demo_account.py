@@ -1,43 +1,45 @@
 import logging
+import random
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from decimal import Decimal
 
 from app.core.config import settings
-from app.models.trade import Trade, TradeCreate
-from app.models.account import Account, Position
 
 logger = logging.getLogger(__name__)
 
 class DemoAccount:
-    """Демо-счёт с улучшенным управлением рисками"""
+    """Демо-счёт с профессиональным управлением рисками"""
     
     def __init__(self):
         self.balance = settings.DEMO_BALANCE
         self.initial_balance = settings.DEMO_BALANCE
         self.currency = "RUB"
-        self.positions: Dict[str, Position] = {}
-        self.trades: List[Trade] = []
+        self.positions: Dict[str, Dict] = {}
+        self.trades: List[Dict] = []
         self.commission = settings.DEMO_COMMISSION
-        self.daily_loss_limit = settings.MAX_DAILY_LOSS
-        self.daily_loss = 0.0
-        self.trades_today = 0
-        self.last_reset_date = datetime.now().date()
-        self.max_position_size = 5  # Максимум 5 контрактов
-        self.risk_per_trade = 0.01   # 1% риска на сделку
         
-        # Стоимость 1 пункта для каждого инструмента
-        self.point_cost = {
-            "RTS": 1000,  # 1 пункт RTS = 1000 ₽
-            "Si": 10      # 1 пункт Si = 10 ₽
-        }
+        # Риск-менеджмент
+        self.daily_loss = 0.0
+        self.daily_trades = 0
+        self.last_reset_date = datetime.now().date()
+        self.max_daily_loss = settings.MAX_DAILY_LOSS
+        self.max_trades_per_day = settings.MAX_TRADES_PER_DAY
+        self.max_position_size = settings.MAX_POSITION_SIZE
+        self.risk_per_trade = settings.RISK_PER_TRADE
+        
+        # Стоимость пункта
+        self.point_cost = {"RTS": 1000, "Si": 10}
+        
+        # Slippage (проскальзывание)
+        self.slippage = {"RTS": 10, "Si": 1}  # пунктов
         
     def reset_daily_limit(self):
-        """Сброс дневного лимита при новом дне"""
+        """Сброс дневных лимитов"""
         today = datetime.now().date()
         if today != self.last_reset_date:
             self.daily_loss = 0.0
-            self.trades_today = 0
+            self.daily_trades = 0
             self.last_reset_date = today
             logger.info("Дневные лимиты сброшены")
             
@@ -45,208 +47,177 @@ class DemoAccount:
         """Проверка возможности торговли"""
         self.reset_daily_limit()
         
-        # Проверка дневного лимита убытков
-        max_loss = self.initial_balance * self.daily_loss_limit
+        # Проверка дневного убытка
+        max_loss = self.initial_balance * self.max_daily_loss
         if self.daily_loss >= max_loss:
-            logger.warning(f"Дневной лимит убытков достигнут: {self.daily_loss} руб.")
+            logger.warning(f"Дневной лимит убытков достигнут: {self.daily_loss:.2f}")
             return False
             
         # Проверка количества сделок
-        if self.trades_today >= settings.MAX_TRADES_PER_DAY:
-            logger.warning(f"Дневной лимит сделок достигнут: {self.trades_today}")
+        if self.daily_trades >= self.max_trades_per_day:
+            logger.warning(f"Дневной лимит сделок: {self.daily_trades}/{self.max_trades_per_day}")
             return False
             
         return True
-    
+        
     def calculate_position_size(self, instrument: str, stop_loss_points: float) -> int:
-        """
-        Расчет размера позиции на основе риска 1% от баланса
-        
-        Args:
-            instrument: RTS или Si
-            stop_loss_points: Стоп-лосс в пунктах
-            
-        Returns:
-            int: Количество контрактов
-        """
-        # Риск на сделку (1% от баланса)
+        """Расчет размера позиции с учетом риска"""
         risk_amount = self.balance * self.risk_per_trade
-        
-        # Стоимость 1 пункта
         point_cost = self.point_cost.get(instrument, 10)
         
-        # Риск на 1 контракт
         risk_per_contract = stop_loss_points * point_cost
+        size = int(risk_amount / risk_per_contract)
         
-        # Расчет количества контрактов
-        size = risk_amount / risk_per_contract
+        size = max(1, min(size, self.max_position_size))
         
-        # Округляем вниз и ограничиваем
-        size = max(1, int(size))  # Минимум 1 контракт
-        size = min(size, self.max_position_size)  # Максимум 5 контрактов
-        
-        # Дополнительная проверка для RTS (слишком дорогой)
-        if instrument == "RTS" and size > 1:
-            logger.warning(f"RTS: размер позиции {size} контрактов слишком большой, устанавливаем 1")
-            size = 1
+        # Ограничение для RTS
+        if instrument == "RTS":
+            size = min(size, 1)
             
-        logger.info(f"Размер позиции для {instrument}: {size} контрактов (риск: {risk_amount:.2f} ₽)")
         return size
         
     async def execute_order(self, instrument: str, side: str, price: float, quantity: int = 1) -> Optional[Dict]:
-        """
-        Исполнение заявки на демо-счёте с управлением рисками
-        """
+        """Исполнение заявки с симуляцией проскальзывания"""
         if not self.can_trade():
             return None
             
-        # Расчет комиссии
-        order_value = price * quantity
-        commission = order_value * self.commission
-        
-        # Проверка для покупки
+        # Симуляция проскальзывания
+        slippage = self.slippage.get(instrument, 0)
         if side == "buy":
-            required = order_value + commission
+            exec_price = price + random.uniform(0, slippage)
+        else:
+            exec_price = price - random.uniform(0, slippage)
+            
+        # Округляем
+        exec_price = round(exec_price, 2)
+        
+        # Комиссия
+        commission = exec_price * quantity * self.commission
+        
+        # Проверка баланса для покупки
+        if side == "buy":
+            required = exec_price * quantity + commission
             if required > self.balance:
-                logger.warning(f"Недостаточно средств: требуется {required}, доступно {self.balance}")
+                logger.warning(f"Недостаточно средств: {required:.2f} > {self.balance:.2f}")
                 return None
                 
             self.balance -= required
             
-            position = Position(
-                instrument=instrument,
-                side="long",
-                entry_price=price,
-                current_price=price,
-                quantity=quantity,
-                profit=0.0,
-                is_open=True
-            )
-            self.positions[instrument] = position
-            logger.info(f"ОТКРЫТА ПОЗИЦИЯ: {instrument} LONG {quantity} контрактов по {price}")
+            self.positions[instrument] = {
+                "side": "long",
+                "entry_price": exec_price,
+                "quantity": quantity,
+                "open_time": datetime.now().isoformat()
+            }
+            
+            logger.info(f"ОТКРЫТА {instrument} LONG {quantity}x по {exec_price:.2f}")
             
         elif side == "sell":
-            if instrument not in self.positions or not self.positions[instrument].is_open:
-                logger.warning(f"Нет открытой позиции для {instrument}")
+            if instrument not in self.positions:
+                logger.warning(f"Нет позиции для {instrument}")
                 return None
                 
-            position = self.positions[instrument]
+            pos = self.positions[instrument]
             
-            if position.side == "long":
-                profit = (price - position.entry_price) * quantity - commission
+            if pos["side"] == "long":
+                profit = (exec_price - pos["entry_price"]) * quantity - commission
             else:
-                profit = (position.entry_price - price) * quantity - commission
+                profit = (pos["entry_price"] - exec_price) * quantity - commission
                 
-            self.balance += price * quantity + profit
-            
-            position.is_open = False
-            position.profit = profit
-            position.current_price = price
-            
-            self.daily_loss += abs(profit) if profit < 0 else 0
-            self.trades_today += 1
+            self.balance += exec_price * quantity + profit
             
             trade = {
-                "id": len(self.trades) + 1,
                 "instrument": instrument,
-                "side": side,
-                "price": price,
+                "side": pos["side"],
+                "entry_price": pos["entry_price"],
+                "exit_price": exec_price,
                 "quantity": quantity,
-                "entry_price": position.entry_price,
-                "timestamp": datetime.now().isoformat(),
-                "status": "filled",
                 "profit": profit,
-                "close_price": price,
+                "open_time": pos["open_time"],
                 "close_time": datetime.now().isoformat(),
                 "commission": commission
             }
+            
             self.trades.append(trade)
             
-            logger.info(f"ЗАКРЫТА ПОЗИЦИЯ: {instrument} P&L: {profit:.2f} ₽")
+            if profit < 0:
+                self.daily_loss += abs(profit)
+            self.daily_trades += 1
+            
+            del self.positions[instrument]
+            
+            logger.info(f"ЗАКРЫТА {instrument} P&L: {profit:+.2f}")
             return trade
             
         return None
         
-    def get_balance(self) -> Dict:
-        """Получение баланса"""
-        total_positions_value = 0
-        for pos in self.positions.values():
-            if pos.is_open:
-                if pos.side == "long":
-                    total_positions_value += (pos.current_price - pos.entry_price) * pos.quantity
-                else:
-                    total_positions_value += (pos.entry_price - pos.current_price) * pos.quantity
-                    
-        total_balance = self.balance + total_positions_value
-        
-        return {
-            "balance": total_balance,
-            "available": self.balance,
-            "currency": self.currency,
-            "initial_balance": self.initial_balance,
-            "total_profit": total_balance - self.initial_balance,
-            "positions_count": len([p for p in self.positions.values() if p.is_open])
-        }
-        
     def get_stats(self) -> Dict:
-        """Получение статистики торговли"""
-        closed_trades = [t for t in self.trades if t.get("status") == "filled"]
+        """Полная статистика"""
+        closed_trades = [t for t in self.trades if "exit_price" in t]
         
         if not closed_trades:
             return {
                 "total_trades": 0,
-                "winning_trades": 0,
-                "losing_trades": 0,
-                "total_profit": 0,
                 "win_rate": 0,
-                "avg_profit": 0,
+                "profit_factor": 0,
+                "total_profit": 0,
+                "avg_win": 0,
                 "avg_loss": 0,
-                "max_drawdown": 0,
-                "profit_factor": 0
+                "max_win": 0,
+                "max_loss": 0,
+                "sharpe": 0,
+                "max_drawdown": 0
             }
             
-        wins = [t for t in closed_trades if t.get("profit", 0) > 0]
-        losses = [t for t in closed_trades if t.get("profit", 0) < 0]
+        profits = [t["profit"] for t in closed_trades]
+        wins = [p for p in profits if p > 0]
+        losses = [p for p in profits if p < 0]
         
-        total_profit = sum(t.get("profit", 0) for t in closed_trades)
-        total_wins = sum(t.get("profit", 0) for t in wins)
-        total_losses = abs(sum(t.get("profit", 0) for t in losses))
+        total_profit = sum(profits)
+        win_rate = len(wins) / len(closed_trades) if closed_trades else 0
+        gross_profit = sum(wins) if wins else 0
+        gross_loss = abs(sum(losses)) if losses else 1
         
         return {
             "total_trades": len(closed_trades),
-            "winning_trades": len(wins),
-            "losing_trades": len(losses),
-            "total_profit": total_profit,
-            "win_rate": (len(wins) / len(closed_trades) * 100) if closed_trades else 0,
-            "avg_profit": total_wins / len(wins) if wins else 0,
-            "avg_loss": total_losses / len(losses) if losses else 0,
-            "max_drawdown": self._calculate_max_drawdown(),
-            "profit_factor": total_wins / total_losses if total_losses > 0 else float('inf')
+            "win_rate": round(win_rate * 100, 1),
+            "profit_factor": round(gross_profit / gross_loss, 2),
+            "total_profit": round(total_profit, 2),
+            "avg_win": round(sum(wins) / len(wins), 2) if wins else 0,
+            "avg_loss": round(sum(losses) / len(losses), 2) if losses else 0,
+            "max_win": round(max(wins) if wins else 0, 2),
+            "max_loss": round(min(losses) if losses else 0, 2),
+            "sharpe": self._calculate_sharpe(profits),
+            "max_drawdown": self._calculate_max_drawdown(profits)
         }
         
-    def _calculate_max_drawdown(self) -> float:
-        """Расчёт максимальной просадки"""
-        if not self.trades:
-            return 0.0
+    def _calculate_sharpe(self, profits: List[float]) -> float:
+        """Расчет Sharpe Ratio"""
+        if len(profits) < 2:
+            return 0
             
+        mean_p = np.mean(profits)
+        std_p = np.std(profits)
+        
+        if std_p == 0:
+            return 0
+            
+        return (mean_p / std_p) * np.sqrt(252)
+        
+    def _calculate_max_drawdown(self, profits: List[float]) -> float:
+        """Расчет максимальной просадки"""
         balance_curve = [self.initial_balance]
-        current_balance = self.initial_balance
-        
-        for trade in self.trades:
-            current_balance += trade.get("profit", 0)
-            balance_curve.append(current_balance)
+        for p in profits:
+            balance_curve.append(balance_curve[-1] + p)
             
-        max_drawdown = 0.0
         peak = balance_curve[0]
+        max_dd = 0
         
-        for value in balance_curve:
-            if value > peak:
-                peak = value
-            drawdown = (peak - value) / peak * 100
-            if drawdown > max_drawdown:
-                max_drawdown = drawdown
+        for val in balance_curve:
+            if val > peak:
+                peak = val
+            dd = (peak - val) / peak * 100
+            if dd > max_dd:
+                max_dd = dd
                 
-        return max_drawdown
-
-# Глобальный экземпляр
-demo_account = DemoAccount()
+        return round(max_dd, 1)
