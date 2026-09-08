@@ -7,6 +7,7 @@ from app.utils.market_hours import MarketHours
 from app.services.market_data import market_data
 from app.strategies.pro_scalping import ProScalpingStrategy
 from app.strategies.smart_money import SmartMoneyStrategy
+from app.strategies.base_strategy import BaseStrategy  # <-- ДОБАВИТЬ ЭТОТ ИМПОРТ
 from app.services.demo_account import DemoAccount
 from app.services.order_flow import OrderFlowAnalyzer
 
