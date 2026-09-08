@@ -68,9 +68,21 @@ class BaseStrategy(ABC):
         # Проверка: интервал между сделками
         if self.trades:
             last_trade = self.trades[-1]
-            time_since = (datetime.now() - last_trade['close_time']).total_seconds()
-            if time_since < 30:  # Минимум 30 секунд между сделками
-                return False
+            # Используем close_time если есть, иначе open_time
+            trade_time_str = last_trade.get('close_time') or last_trade.get('open_time') or last_trade.get('time')
+            if trade_time_str:
+                try:
+                    # Пробуем разные форматы даты
+                    if isinstance(trade_time_str, str):
+                        trade_time = datetime.fromisoformat(trade_time_str.replace('Z', '+00:00'))
+                    else:
+                        trade_time = trade_time_str
+                    time_since = (datetime.now() - trade_time).total_seconds()
+                    if time_since < 30:  # Минимум 30 секунд между сделками
+                        return False
+                except (ValueError, TypeError, AttributeError):
+                    # Если не удалось распарсить время, пропускаем проверку
+                    pass
                 
         return True
         
@@ -241,3 +253,13 @@ class BaseStrategy(ABC):
             
         rs = avg_gain / avg_loss
         return 100 - (100 / (1 + rs))
+        
+    def _calculate_profit(self, current_price: float) -> float:
+        """Расчёт текущей прибыли по открытой позиции"""
+        if not self.position_open or self.entry_price is None:
+            return 0.0
+            
+        if self.position_side == 'buy':
+            return (current_price - self.entry_price) * self.quantity
+        else:  # sell
+            return (self.entry_price - current_price) * self.quantity
